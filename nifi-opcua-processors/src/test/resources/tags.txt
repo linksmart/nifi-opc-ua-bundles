@@ -1,0 +1,2 @@
+ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG1_EXT
+ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG1_RET
