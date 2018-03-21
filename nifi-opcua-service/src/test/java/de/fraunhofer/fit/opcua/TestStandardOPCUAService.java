@@ -22,7 +22,6 @@ import org.apache.nifi.util.TestRunners;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -61,8 +60,8 @@ public class TestStandardOPCUAService {
 
         runner.enableControllerService(service);
 
-        System.out.println(service.getNodes("--", 3, 10, false,
-                "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars"));
+        System.out.println(new String(service.getNodes("--", 3, 10, false,
+                "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars")));
 
         runner.disableControllerService(service);
     }
@@ -71,7 +70,7 @@ public class TestStandardOPCUAService {
     public void testServiceGetValues() throws InitializationException {
         final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
         final StandardOPCUAService service = new StandardOPCUAService();
-        runner.addControllerService("test-good", service);
+        runner.addControllerService("controller", service);
 
         runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
         runner.assertValid(service);
@@ -82,7 +81,7 @@ public class TestStandardOPCUAService {
                 "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG2_EXT");
 
         byte[] bytes = service.getValue(tagList, "Both", true, "");
-        System.out.println (new String(bytes));
+        System.out.println(new String(bytes));
 
         runner.disableControllerService(service);
     }

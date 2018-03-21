@@ -27,13 +27,18 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.reporting.InitializationException;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
+import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfig;
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder;
+import org.eclipse.milo.opcua.sdk.client.api.identity.AnonymousProvider;
+import org.eclipse.milo.opcua.sdk.client.api.identity.IdentityProvider;
+import org.eclipse.milo.opcua.sdk.client.api.identity.UsernameProvider;
 import org.eclipse.milo.opcua.sdk.client.api.nodes.Node;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription;
 import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
+import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
@@ -72,15 +77,52 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
+    private static final PropertyDescriptor APPLICATION_NAME = new PropertyDescriptor
+            .Builder().name("Application Name")
+            .description("The application name is used to label certificates identifying this application")
+            .required(true)
+            .defaultValue("urn:eclipse:milo:examples:client")
+            .addValidator(StandardValidators.NON_BLANK_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor AUTH_POLICY = new PropertyDescriptor
+            .Builder().name("Authentication Policy")
+            .description("How should Nifi authenticate with the UA server")
+            .required(true)
+            .defaultValue("Anon")
+            .allowableValues("Anon", "Username")
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    private static final PropertyDescriptor USERNAME = new PropertyDescriptor
+            .Builder().name("User Name")
+            .description("The user name to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
+            .required(false)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    private static final PropertyDescriptor PASSWORD = new PropertyDescriptor
+            .Builder().name("Password")
+            .description("The password to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
+            .required(false)
+            .sensitive(true)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
     private static final List<PropertyDescriptor> properties;
 
     private final String SECURITY_POLICY_PREFIX = "http://opcfoundation.org/UA/SecurityPolicy#";
 
-    private String endpoint;
-    private String securityPolicy;
+
     private OpcUaClient opcClient;
     private UaSubscription uaSubscription;
     private Map<String, List<UaMonitoredItem>> subscriberMap;
+    private String endpoint;
+    private String securityPolicy;
+    private String applicationName;
+    private String userName;
+    private String password;
+    private String authType;
 
     private final AtomicLong clientHandles = new AtomicLong(1L);
 
@@ -88,6 +130,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         final List<PropertyDescriptor> props = new ArrayList<>();
         props.add(ENDPOINT);
         props.add(SECURITY_POLICY);
+        props.add(APPLICATION_NAME);
+        props.add(AUTH_POLICY);
+        props.add(USERNAME);
+        props.add(PASSWORD);
         properties = Collections.unmodifiableList(props);
     }
 
@@ -104,6 +150,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     public void onEnabled(final ConfigurationContext context) throws InitializationException {
 
         endpoint = context.getProperty(ENDPOINT).getValue();
+        applicationName = context.getProperty(APPLICATION_NAME).getValue();
+        userName = context.getProperty(USERNAME).getValue();
+        password = context.getProperty(PASSWORD).getValue();
+        authType = context.getProperty(AUTH_POLICY).getValue();
         securityPolicy = SECURITY_POLICY_PREFIX + context.getProperty(SECURITY_POLICY).getValue();
 
         try {
@@ -125,9 +175,33 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 throw new RuntimeException("No endpoint with the specified security policy was found.");
             }
 
-            OpcUaClientConfigBuilder cfg = new OpcUaClientConfigBuilder();
-            cfg.setEndpoint(endpoints[0]);
-            opcClient = new OpcUaClient(cfg.build());
+            OpcUaClientConfig cfg = null;
+            if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) { // If no security policy is used
+
+                cfg = new OpcUaClientConfigBuilder()
+                        .setEndpoint(endpointDescription)
+                        .build();
+
+            } else {  // If security policy is used
+
+                // Generate self-signed certificate according to application name, or retrieve already generated one
+                KeyStoreLoader loader = new KeyStoreLoader().load(applicationName);
+
+                IdentityProvider identityProvider = authType.equals("Anon") ? new AnonymousProvider()
+                        : new UsernameProvider(userName, password);
+
+                cfg = OpcUaClientConfig.builder()
+                        .setApplicationName(LocalizedText.english("eclipse milo opc-ua client"))
+                        .setApplicationUri(applicationName)
+                        .setCertificate(loader.getClientCertificate())
+                        .setKeyPair(loader.getClientKeyPair())
+                        .setEndpoint(endpointDescription)
+                        .setIdentityProvider(identityProvider)
+                        .setRequestTimeout(uint(5000))
+                        .build();
+            }
+
+            opcClient = new OpcUaClient(cfg);
             opcClient.connect().get();
 
 
@@ -219,8 +293,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
         return valueLine;
     }
-
-
 
 
     @Override

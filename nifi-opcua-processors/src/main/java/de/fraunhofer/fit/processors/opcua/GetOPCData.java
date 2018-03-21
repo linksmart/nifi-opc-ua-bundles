@@ -154,6 +154,7 @@ public class GetOPCData extends AbstractProcessor {
 
     @OnScheduled
     public void onScheduled(final ProcessContext context) {
+
         timestamp.set(context.getProperty(RETURN_TIMESTAMP).getValue());
         excludeNullValue.set(context.getProperty(EXCLUDE_NULL_VALUE).getValue().equals("Yes"));
         if (context.getProperty(NULL_VALUE_STRING).isSet()) {
