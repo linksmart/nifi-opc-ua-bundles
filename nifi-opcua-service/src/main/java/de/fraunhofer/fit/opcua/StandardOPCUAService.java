@@ -112,10 +112,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             EndpointDescription endpointDescription = null;
             for (EndpointDescription ed : endpoints) {
-
+                getLogger().info("Endpoint: " + ed.getEndpointUrl() + " security: " + ed.getSecurityPolicyUri());
                 if (ed.getSecurityPolicyUri().equals(securityPolicy)) {
                     endpointDescription = ed;
-                    getLogger().debug("Connecting to endpoint " + ed.getEndpointUrl()
+                    getLogger().info("Connecting to endpoint " + ed.getEndpointUrl()
                             + " with security policy " + ed.getSecurityPolicyUri());
                 }
             }
@@ -126,7 +126,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             }
 
             OpcUaClientConfigBuilder cfg = new OpcUaClientConfigBuilder();
-            cfg.setEndpoint(endpoints[0]);
+            cfg.setEndpoint(endpointDescription);
             opcClient = new OpcUaClient(cfg.build());
             opcClient.connect().get();
 

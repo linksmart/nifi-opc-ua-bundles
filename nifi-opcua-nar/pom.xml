@@ -25,6 +25,9 @@
     <artifactId>nifi-opcua-nar</artifactId>
     <version>1.0</version>
     <packaging>nar</packaging>
+    <build>
+       <finalName>nifi-opcua</finalName> <!-- Define a name for the nar file so that it is easy to access from Dockerfile -->
+    </build>
     <properties>
         <maven.javadoc.skip>true</maven.javadoc.skip>
         <source.skip>true</source.skip>
