@@ -201,6 +201,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
 
+        if(value.getServerTime() == null || value.getServerTime() == null) {
+            return null;
+        }
+
         // TODO: maybe use StringBuilder for better performance
         String valueLine = "";
 
@@ -210,7 +214,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             valueLine += value.getServerTime().getJavaTime() + ",";
         }
         if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine += value.getSourceTime().getJavaTime() + ",";
+            valueLine += value.getServerTime().getJavaTime() + ",";
         }
 
         valueLine += value.getValue().getValue().toString() + ","
@@ -291,7 +295,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                         String valueLine = writeCsv(getFullName(it.getReadValueId().getNodeId()),
                                 "Both", value);
 
-                        queue.offer(valueLine);
+                        if(valueLine != null) {
+                            queue.offer(valueLine);
+                        }
+
                     });
 
             List<UaMonitoredItem> items = uaSubscription.createMonitoredItems(
