@@ -35,6 +35,7 @@ public class SubscribeOPCNodesTest {
     private final String endpoint = "opc.tcp://10.223.104.20:48010";
     private StandardOPCUAService service;
 
+
     @Before
     public void init() throws InitializationException {
         testRunner = TestRunners.newTestRunner(SubscribeOPCNodes.class);
@@ -46,6 +47,7 @@ public class SubscribeOPCNodesTest {
 
         testRunner.enableControllerService(service);
     }
+
 
     @Test
     public void testProcessor() throws Exception {

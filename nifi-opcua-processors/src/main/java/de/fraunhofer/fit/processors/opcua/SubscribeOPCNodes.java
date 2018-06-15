@@ -69,7 +69,18 @@ public class SubscribeOPCNodes extends AbstractProcessor {
 
     public static final PropertyDescriptor AGGREGATE_RECORD = new PropertyDescriptor
             .Builder().name("Whether to aggregate records")
-            .description("If this is set to true, then variable with the same time stamp will be merged into a single line. This is convenient for batch")
+            .description("If this is set to true, then variable with the same time stamp will be merged into a single line. This is useful for batch-based data.")
+            .required(true)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .sensitive(false)
+            .build();
+
+    public static final PropertyDescriptor REPLACE_NULL_WITH_PREVIOUS = new PropertyDescriptor
+            .Builder().name("Whether to replace null value with previous retrieved value")
+            .description("This option is only applicable if aggregate record is set to true. " +
+                    "In batch-based data, if the value of data is not changed,")
             .required(true)
             .defaultValue("false")
             .allowableValues("true", "false")
@@ -176,8 +187,9 @@ public class SubscribeOPCNodes extends AbstractProcessor {
                         flowFile = session.write(flowFile, (OutputStream out) -> out.write(outputMsgBytes));
 
                         // add header to attribute (remember to add time stamp colum to the first)
-                        Map<String, String> attrMap = flowFile.getAttributes();
-                        attrMap.put("csvHeader", "timestamp," + String.join(",", tagNames));
+                        Map<String, String> attrMap = new HashMap<>();
+                        attrMap.put("csvHeader", "timestamp," + String.join(",", tagNames) + System.getProperty("line.separator"));
+                        flowFile = session.putAllAttributes(flowFile, attrMap);
 
                         // Transfer data to flow file
                         session.transfer(flowFile, SUCCESS);
@@ -187,6 +199,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
                     }
                 }
             }
+            recordAggregator.clearReadyRecord();
         }
 
     }

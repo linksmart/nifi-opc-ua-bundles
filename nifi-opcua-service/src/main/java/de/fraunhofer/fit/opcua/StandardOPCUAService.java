@@ -34,15 +34,14 @@ import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription;
 import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
+import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.DataChangeTrigger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn;
-import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription;
-import org.eclipse.milo.opcua.stack.core.types.structured.MonitoredItemCreateRequest;
-import org.eclipse.milo.opcua.stack.core.types.structured.MonitoringParameters;
-import org.eclipse.milo.opcua.stack.core.types.structured.ReadValueId;
+import org.eclipse.milo.opcua.stack.core.types.structured.*;
 
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
@@ -169,7 +168,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             StringBuilder serverResponse = new StringBuilder();
 
             for (int i = 0; i < tagNames.size(); i++) {
-                String valueLine = "";
+                String valueLine;
                 try {
                     if (excludeNullValue && rvList.get(i).getValue().getValue().toString().equals(nullValueString)) {
                         getLogger().debug("Null value returned for " + rvList.get(i).getValue().getValue().toString()
@@ -201,7 +200,9 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
 
-        if(value.getServerTime() == null || value.getServerTime() == null) {
+        if(value == null || value.getServerTime() == null ||
+                value.getSourceTime() == null || value.getValue() == null ||
+                value.getValue().getValue() == null) {
             return null;
         }
 
@@ -214,7 +215,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             valueLine += value.getServerTime().getJavaTime() + ",";
         }
         if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine += value.getServerTime().getJavaTime() + ",";
+            valueLine += value.getSourceTime().getJavaTime() + ",";
         }
 
         valueLine += value.getValue().getValue().toString() + ","
@@ -274,10 +275,15 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 Long clientHandleLong = clientHandles.getAndIncrement();
                 UInteger clientHandle = uint(clientHandleLong);
 
+                // Important! Data change filter, which get data if either timestamp or value has changed
+                // If we apply this filter in MonitoringParameters, now not only we will get data when value changes,
+                // we will also get data even value doesn't change, but the timestamp has changed.
+                DataChangeFilter df = new DataChangeFilter(DataChangeTrigger.from(2), null, null);
+
                 MonitoringParameters parameters = new MonitoringParameters(
                         clientHandle,
-                        1000.0,     // sampling interval
-                        null,       // filter, null means use default
+                        300.0,     // sampling interval
+                        ExtensionObject.encode(df),       // filter, null means use default
                         uint(10),   // queue size
                         true        // discard oldest
                 );

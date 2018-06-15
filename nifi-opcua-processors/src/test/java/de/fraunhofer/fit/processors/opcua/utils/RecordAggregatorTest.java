@@ -326,9 +326,12 @@ public class RecordAggregatorTest {
         ra.aggregate();
 
         assertEquals(2, ra.getReadyRecords().size());
+        ra.clearReadyRecord();
+        assertEquals(0, ra.getReadyRecords().size());
         for(String s : ra.getReadyRecords()) {
             System.out.println(s);
         }
+
     }
 
 
