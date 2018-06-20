@@ -251,7 +251,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     }
 
     @Override
-    public String subscribe(List<String> tagNames, BlockingQueue<String> queue) throws ProcessException {
+    public String subscribe(List<String> tagNames, BlockingQueue<String> queue, boolean tsChangedNotify) throws ProcessException {
 
         if (subscriberMap == null) {
             subscriberMap = new HashMap<>();
@@ -275,10 +275,12 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 Long clientHandleLong = clientHandles.getAndIncrement();
                 UInteger clientHandle = uint(clientHandleLong);
 
-                // Important! Data change filter, which get data if either timestamp or value has changed
+                // Important!
                 // If we apply this filter in MonitoringParameters, now not only we will get data when value changes,
                 // we will also get data even value doesn't change, but the timestamp has changed.
-                DataChangeFilter df = new DataChangeFilter(DataChangeTrigger.from(2), null, null);
+                // If it is null, then the default DataChangeFilter will be used, which only get data when its value changes.
+                DataChangeFilter df = tsChangedNotify?
+                        new DataChangeFilter(DataChangeTrigger.from(2), null, null) : null;
 
                 MonitoringParameters parameters = new MonitoringParameters(
                         clientHandle,

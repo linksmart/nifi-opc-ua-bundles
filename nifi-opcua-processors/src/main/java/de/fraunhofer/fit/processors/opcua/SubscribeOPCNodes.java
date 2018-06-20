@@ -50,6 +50,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
     private List<String> tagNames;
     private String subscriberUid;
     private boolean aggregateRecord;
+    private boolean tsChangedNotify;
     private RecordAggregator recordAggregator;
 
     public static final PropertyDescriptor OPCUA_SERVICE = new PropertyDescriptor.Builder()
@@ -60,7 +61,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
             .build();
 
     public static final PropertyDescriptor TAG_FILE_LOCATION = new PropertyDescriptor
-            .Builder().name("Location of the Tag List File")
+            .Builder().name("Tag List File Location")
             .description("The location of the tag list file")
             .required(true)
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
@@ -68,8 +69,8 @@ public class SubscribeOPCNodes extends AbstractProcessor {
             .build();
 
     public static final PropertyDescriptor AGGREGATE_RECORD = new PropertyDescriptor
-            .Builder().name("Whether to aggregate records")
-            .description("If this is set to true, then variable with the same time stamp will be merged into a single line. This is useful for batch-based data.")
+            .Builder().name("Aggregate Records")
+            .description("Whether to aggregate records. If this is set to true, then variable with the same time stamp will be merged into a single line. This is useful for batch-based data.")
             .required(true)
             .defaultValue("false")
             .allowableValues("true", "false")
@@ -77,17 +78,15 @@ public class SubscribeOPCNodes extends AbstractProcessor {
             .sensitive(false)
             .build();
 
-    public static final PropertyDescriptor REPLACE_NULL_WITH_PREVIOUS = new PropertyDescriptor
-            .Builder().name("Whether to replace null value with previous retrieved value")
-            .description("This option is only applicable if aggregate record is set to true. " +
-                    "In batch-based data, if the value of data is not changed,")
+    public static final PropertyDescriptor TS_CHANGE_NOTIFY = new PropertyDescriptor
+            .Builder().name("Notified when Timestamp changed")
+            .description("Whether the data should be collected, when only the timestamp of a variable has changed, but not its value.")
             .required(true)
-            .defaultValue("false")
+            .defaultValue("true")
             .allowableValues("true", "false")
             .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
             .sensitive(false)
             .build();
-
 
     public static final Relationship SUCCESS = new Relationship.Builder()
             .name("Success")
@@ -109,6 +108,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
         descriptors.add(OPCUA_SERVICE);
         descriptors.add(TAG_FILE_LOCATION);
         descriptors.add(AGGREGATE_RECORD);
+        descriptors.add(TS_CHANGE_NOTIFY);
 
         this.descriptors = Collections.unmodifiableList(descriptors);
 
@@ -145,8 +145,8 @@ public class SubscribeOPCNodes extends AbstractProcessor {
         }
 
         aggregateRecord = Boolean.valueOf(context.getProperty(AGGREGATE_RECORD).getValue());
-
-        subscriberUid = opcUaService.subscribe(tagNames, msgQueue);
+        tsChangedNotify = Boolean.valueOf(context.getProperty(TS_CHANGE_NOTIFY).getValue());
+        subscriberUid = opcUaService.subscribe(tagNames, msgQueue, tsChangedNotify);
 
         recordAggregator = new RecordAggregator(msgQueue, tagNames);
 

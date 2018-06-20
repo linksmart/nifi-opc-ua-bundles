@@ -33,6 +33,7 @@ import java.util.concurrent.BlockingQueue;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.spy;
 
@@ -40,15 +41,13 @@ import static org.mockito.Mockito.spy;
 public class SubscribeOPCNodesTest {
 
     private TestRunner testRunner;
-    private final String endpoint = "opc.tcp://10.223.104.20:48010";
     private StandardOPCUAService service;
-
 
     @Before
     public void init() throws InitializationException {
         testRunner = TestRunners.newTestRunner(SubscribeOPCNodes.class);
         // Use partial mock
-        service = spy(StandardOPCUAService.class);
+        service = spy(new StandardOPCUAService());
 
         Mockito.doNothing().when(service).unsubscribe(anyString());
         Mockito.doNothing().when(service).onEnabled(any());
@@ -56,7 +55,7 @@ public class SubscribeOPCNodesTest {
 
         testRunner.addControllerService("controller", service);
 
-        testRunner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
+        testRunner.setProperty(service, StandardOPCUAService.ENDPOINT, "dummy endpoint");
         testRunner.assertValid(service);
 
         testRunner.enableControllerService(service);
@@ -91,7 +90,7 @@ public class SubscribeOPCNodesTest {
                     populateQueue((BlockingQueue<String>) args[1], queueString);
                     return "12345678"; // random subscriber uid, doesn't matter in test
                 }
-        ).when(service).subscribe(any(), any());
+        ).when(service).subscribe(any(), any(), anyBoolean());
 
 
         testRunner.setProperty(SubscribeOPCNodes.OPCUA_SERVICE, "controller");
@@ -107,8 +106,6 @@ public class SubscribeOPCNodesTest {
         assertEquals(1, results.size());
         String expectedPayload = "1528285608582,,,,,2419756,,,150.13992,42.543697,,38.71,,10.848699,32.43998,33.245487,,,,,,4.540133,0.948,,,,50.000004,,,,,,11.0207815,,,-0.07940674,0.20775,,,350.05255,,,,,,,,,,,," + System.lineSeparator();
         results.get(0).assertContentEquals(expectedPayload);
-        results.forEach((result) -> System.out.println(new String(testRunner.getContentAsByteArray(result))));
-
 
     }
 
