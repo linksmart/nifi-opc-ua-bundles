@@ -79,6 +79,10 @@ public class RecordAggregatorTest {
         Thread.sleep(1500);
         ra.aggregate();
 
+        for(String s : ra.getReadyRecords()) {
+            System.out.println(s);
+        }
+
         assertEquals(1, ra.getReadyRecords().size());
     }
 
@@ -326,11 +330,10 @@ public class RecordAggregatorTest {
         ra.aggregate();
 
         assertEquals(2, ra.getReadyRecords().size());
+
         ra.clearReadyRecord();
         assertEquals(0, ra.getReadyRecords().size());
-        for(String s : ra.getReadyRecords()) {
-            System.out.println(s);
-        }
+
 
     }
 
