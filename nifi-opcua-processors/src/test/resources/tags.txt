@@ -1,2 +1,6 @@
 ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG1_EXT
 ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG1_RET
+ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG2_EXT
+ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG3_RET
+ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG3_EXT
+ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG3_RET

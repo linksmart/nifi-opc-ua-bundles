@@ -198,36 +198,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     }
 
 
-    private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
-
-        if(value == null || value.getServerTime() == null ||
-                value.getSourceTime() == null || value.getValue() == null ||
-                value.getValue().getValue() == null) {
-            return null;
-        }
-
-        // TODO: maybe use StringBuilder for better performance
-        String valueLine = "";
-
-        valueLine += tagName + ',';
-
-        if (("ServerTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine += value.getServerTime().getJavaTime() + ",";
-        }
-        if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine += value.getSourceTime().getJavaTime() + ",";
-        }
-
-        valueLine += value.getValue().getValue().toString() + ","
-                + value.getStatusCode().getValue()
-                + System.getProperty("line.separator");
-
-        return valueLine;
-    }
-
-
-
-
     @Override
     public byte[] getNodes(String indentString, int maxRecursiveDepth, int maxReferencePerNode,
                            boolean printNonLeafNode, String rootNodeId)
@@ -354,7 +324,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             }
         }
 
-        // TODO: maybe return boolean as result?
     }
 
     // remainDepth = 0 means only print out the current node
@@ -431,4 +400,23 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         return sb.toString();
     }
 
+    private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
+
+        StringBuilder valueLine = new StringBuilder();
+
+        valueLine.append(tagName).append(",");
+
+        if (("ServerTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
+            valueLine.append(value.getServerTime().getJavaTime()).append(",");
+        }
+        if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
+            valueLine.append(value.getSourceTime().getJavaTime()).append(",");
+        }
+
+        valueLine.append(value.getValue().getValue().toString()).
+                append(value.getStatusCode().getValue()).
+                append(System.getProperty("line.separator"));
+
+        return valueLine.toString();
+    }
 }

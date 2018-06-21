@@ -32,9 +32,7 @@ import java.util.List;
 import java.util.concurrent.BlockingQueue;
 
 import static org.junit.Assert.assertEquals;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.spy;
 
 
@@ -46,9 +44,9 @@ public class SubscribeOPCNodesTest {
     @Before
     public void init() throws InitializationException {
         testRunner = TestRunners.newTestRunner(SubscribeOPCNodes.class);
+
         // Use partial mock
         service = spy(new StandardOPCUAService());
-
         Mockito.doNothing().when(service).unsubscribe(anyString());
         Mockito.doNothing().when(service).onEnabled(any());
         Mockito.doNothing().when(service).shutdown();

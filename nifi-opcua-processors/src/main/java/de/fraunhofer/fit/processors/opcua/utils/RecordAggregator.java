@@ -1,7 +1,6 @@
 package de.fraunhofer.fit.processors.opcua.utils;
 
 import java.util.*;
-import java.util.concurrent.BlockingQueue;
 
 public class RecordAggregator {
 
@@ -14,15 +13,13 @@ public class RecordAggregator {
     private final int VALUE_INDEX = 3;
     private final int STATUS_CODE_INDEX = 4;
 
-    private BlockingQueue<String> queue;
     private List<String> tags;
     private Map<String, Integer> tagOrderMap;
     private Map<String, Record> recordMap;
     private SortedMap<String, Record> readyRecordMap;
 
-    public RecordAggregator(BlockingQueue<String> queue, List<String> tags) {
+    public RecordAggregator(List<String> tags) {
 
-        this.queue = queue;
         this.tags = tags;
         this.tagOrderMap = new HashMap<>();
         this.recordMap = new HashMap<>();
@@ -35,17 +32,16 @@ public class RecordAggregator {
 
     }
 
-    public void aggregate() {
+    public void aggregate(String rawMsg) {
 
-        // Process messages in the queue
-        while (queue.size() != 0) {
+
             // msg has the following elements in order:
             // 1. variable ID; 2. server time stamp; 3. source time stamp; 4. value; 5. status code
-            String[] msg = queue.poll().trim().split(",");
+            String[] msg = rawMsg.trim().split(",");
 
             // Ditch all messages with bad status code
             if (!msg[STATUS_CODE_INDEX].equals("0")) {
-                continue;
+                return;
             }
 
             String timeStamp = msg[SOURCE_TS_INDEX];
@@ -65,13 +61,15 @@ public class RecordAggregator {
             }
             // Get the index of the variable given in the message
             if (!tagOrderMap.containsKey(variableId)) {
-                continue;
+                return;
             }
             int index = tagOrderMap.get(variableId);
             // Update the value in the record array
             rec.getRecordArray()[index] = value;
         }
 
+
+    public List<String> getReadyRecords() {
         // Move old record to another list, ready for publish
         long currentTime = System.currentTimeMillis();
         Iterator<Map.Entry<String, Record>> iterator = recordMap.entrySet().iterator();
@@ -82,9 +80,7 @@ public class RecordAggregator {
                 iterator.remove();
             }
         }
-    }
 
-    public List<String> getReadyRecords() {
         List<String> list = new ArrayList<>();
         for (Map.Entry<String, Record> entry : readyRecordMap.entrySet()) {
             list.add(entry.getKey() + "," +

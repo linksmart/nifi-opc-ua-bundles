@@ -148,7 +148,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
         tsChangedNotify = Boolean.valueOf(context.getProperty(TS_CHANGE_NOTIFY).getValue());
         subscriberUid = opcUaService.subscribe(tagNames, msgQueue, tsChangedNotify);
 
-        recordAggregator = new RecordAggregator(msgQueue, tagNames);
+        recordAggregator = new RecordAggregator(tagNames);
 
     }
 
@@ -175,7 +175,11 @@ public class SubscribeOPCNodes extends AbstractProcessor {
                 }
             }
         } else {
-            recordAggregator.aggregate();
+            String rawMsg;
+            while ((rawMsg = msgQueue.poll()) != null) {
+                recordAggregator.aggregate(rawMsg);
+            }
+
             List<String> list = recordAggregator.getReadyRecords();
             for(String msg: list) {
                 // Write the results back out to a flow file
