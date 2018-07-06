@@ -16,15 +16,7 @@
  */
 package de.fraunhofer.fit.opcua;
 
-import org.apache.nifi.reporting.InitializationException;
-import org.apache.nifi.util.TestRunner;
-import org.apache.nifi.util.TestRunners;
 import org.junit.Before;
-import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 public class TestStandardOPCUAService {
 
@@ -35,7 +27,7 @@ public class TestStandardOPCUAService {
 
     }
 
-    @Test
+/*    @Test
     public void testServiceInitialization() throws InitializationException {
         final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
         final StandardOPCUAService service = new StandardOPCUAService();
@@ -85,6 +77,6 @@ public class TestStandardOPCUAService {
         System.out.println (new String(bytes));
 
         runner.disableControllerService(service);
-    }
+    }*/
 
 }

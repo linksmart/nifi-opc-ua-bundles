@@ -16,20 +16,9 @@
  */
 package de.fraunhofer.fit.processors.opcua;
 
-import de.fraunhofer.fit.opcua.StandardOPCUAService;
-import org.apache.nifi.reporting.InitializationException;
-import org.apache.nifi.util.MockFlowFile;
-import org.apache.nifi.util.TestRunner;
-import org.apache.nifi.util.TestRunners;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.util.List;
-
-
 public class ListOPCNodesTest {
 
-    private TestRunner testRunner;
+    /*private TestRunner testRunner;
     private final String endpoint = "opc.tcp://10.223.104.20:48010";
     private StandardOPCUAService service;
 
@@ -46,7 +35,7 @@ public class ListOPCNodesTest {
     }
 
     @Test
-    public void testProcessor() {
+    public void testListingNodes() {
         testRunner.setProperty(ListOPCNodes.OPCUA_SERVICE, "controller");
         testRunner.setProperty(ListOPCNodes.MAX_REFERENCE_PER_NODE, "10");
         testRunner.setProperty(ListOPCNodes.PRINT_INDENTATION, "");
@@ -58,6 +47,6 @@ public class ListOPCNodesTest {
 
         List<MockFlowFile> results = testRunner.getFlowFilesForRelationship(GetOPCData.SUCCESS);
         System.out.println(new String(testRunner.getContentAsByteArray(results.get(0))));
-    }
+    }*/
 
 }

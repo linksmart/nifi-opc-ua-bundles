@@ -58,7 +58,7 @@ public class GetOPCDataTest {
     }
 
     @Test
-    public void testProcessor() {
+    public void testGetData() {
 
         String tagFilePath = (new File("src\\test\\resources\\tags.txt")).getAbsolutePath();
 
@@ -85,7 +85,7 @@ public class GetOPCDataTest {
     }
 
     @Test
-    public void testProcessorMerge() {
+    public void testGetDataWithAggregation() {
 
         String tagFilePath = (new File("src\\test\\resources\\tags.txt")).getAbsolutePath();
 
