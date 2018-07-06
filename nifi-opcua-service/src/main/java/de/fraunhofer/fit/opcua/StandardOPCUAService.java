@@ -414,6 +414,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         }
 
         valueLine.append(value.getValue().getValue().toString()).
+                append(",").
                 append(value.getStatusCode().getValue()).
                 append(System.getProperty("line.separator"));
 
