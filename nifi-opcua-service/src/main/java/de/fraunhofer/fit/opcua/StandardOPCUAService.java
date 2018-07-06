@@ -27,27 +27,21 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.reporting.InitializationException;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
-import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfig;
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder;
-import org.eclipse.milo.opcua.sdk.client.api.identity.AnonymousProvider;
-import org.eclipse.milo.opcua.sdk.client.api.identity.IdentityProvider;
-import org.eclipse.milo.opcua.sdk.client.api.identity.UsernameProvider;
 import org.eclipse.milo.opcua.sdk.client.api.nodes.Node;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription;
 import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
-import org.eclipse.milo.opcua.stack.core.types.builtin.LocalizedText;
+import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
 import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.DataChangeTrigger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn;
-import org.eclipse.milo.opcua.stack.core.types.structured.EndpointDescription;
-import org.eclipse.milo.opcua.stack.core.types.structured.MonitoredItemCreateRequest;
-import org.eclipse.milo.opcua.stack.core.types.structured.MonitoringParameters;
-import org.eclipse.milo.opcua.stack.core.types.structured.ReadValueId;
+import org.eclipse.milo.opcua.stack.core.types.structured.*;
 
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
@@ -77,52 +71,15 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
-    private static final PropertyDescriptor APPLICATION_NAME = new PropertyDescriptor
-            .Builder().name("Application Name")
-            .description("The application name is used to label certificates identifying this application")
-            .required(true)
-            .defaultValue("urn:eclipse:milo:examples:client")
-            .addValidator(StandardValidators.NON_BLANK_VALIDATOR)
-            .build();
-
-    public static final PropertyDescriptor AUTH_POLICY = new PropertyDescriptor
-            .Builder().name("Authentication Policy")
-            .description("How should Nifi authenticate with the UA server")
-            .required(true)
-            .defaultValue("Anon")
-            .allowableValues("Anon", "Username")
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
-
-    private static final PropertyDescriptor USERNAME = new PropertyDescriptor
-            .Builder().name("User Name")
-            .description("The user name to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
-            .required(false)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
-
-    private static final PropertyDescriptor PASSWORD = new PropertyDescriptor
-            .Builder().name("Password")
-            .description("The password to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
-            .required(false)
-            .sensitive(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .build();
-
     private static final List<PropertyDescriptor> properties;
 
     private final String SECURITY_POLICY_PREFIX = "http://opcfoundation.org/UA/SecurityPolicy#";
 
-
+    private String endpoint;
+    private String securityPolicy;
     private OpcUaClient opcClient;
     private UaSubscription uaSubscription;
     private Map<String, List<UaMonitoredItem>> subscriberMap;
-    private String endpoint;
-    private String securityPolicy;
-    private String applicationName;
-    private String userName;
-    private String password;
-    private String authType;
 
     private final AtomicLong clientHandles = new AtomicLong(1L);
 
@@ -130,10 +87,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         final List<PropertyDescriptor> props = new ArrayList<>();
         props.add(ENDPOINT);
         props.add(SECURITY_POLICY);
-        props.add(APPLICATION_NAME);
-        props.add(AUTH_POLICY);
-        props.add(USERNAME);
-        props.add(PASSWORD);
         properties = Collections.unmodifiableList(props);
     }
 
@@ -150,10 +103,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     public void onEnabled(final ConfigurationContext context) throws InitializationException {
 
         endpoint = context.getProperty(ENDPOINT).getValue();
-        applicationName = context.getProperty(APPLICATION_NAME).getValue();
-        userName = context.getProperty(USERNAME).getValue();
-        password = context.getProperty(PASSWORD).getValue();
-        authType = context.getProperty(AUTH_POLICY).getValue();
         securityPolicy = SECURITY_POLICY_PREFIX + context.getProperty(SECURITY_POLICY).getValue();
 
         try {
@@ -162,10 +111,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             EndpointDescription endpointDescription = null;
             for (EndpointDescription ed : endpoints) {
-
+                getLogger().info("Endpoint: " + ed.getEndpointUrl() + " security: " + ed.getSecurityPolicyUri());
                 if (ed.getSecurityPolicyUri().equals(securityPolicy)) {
                     endpointDescription = ed;
-                    getLogger().debug("Connecting to endpoint " + ed.getEndpointUrl()
+                    getLogger().info("Connecting to endpoint " + ed.getEndpointUrl()
                             + " with security policy " + ed.getSecurityPolicyUri());
                 }
             }
@@ -175,33 +124,9 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 throw new RuntimeException("No endpoint with the specified security policy was found.");
             }
 
-            OpcUaClientConfig cfg = null;
-            if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) { // If no security policy is used
-
-                cfg = new OpcUaClientConfigBuilder()
-                        .setEndpoint(endpointDescription)
-                        .build();
-
-            } else {  // If security policy is used
-
-                // Generate self-signed certificate according to application name, or retrieve already generated one
-                KeyStoreLoader loader = new KeyStoreLoader().load(applicationName);
-
-                IdentityProvider identityProvider = authType.equals("Anon") ? new AnonymousProvider()
-                        : new UsernameProvider(userName, password);
-
-                cfg = OpcUaClientConfig.builder()
-                        .setApplicationName(LocalizedText.english("eclipse milo opc-ua client"))
-                        .setApplicationUri(applicationName)
-                        .setCertificate(loader.getClientCertificate())
-                        .setKeyPair(loader.getClientKeyPair())
-                        .setEndpoint(endpointDescription)
-                        .setIdentityProvider(identityProvider)
-                        .setRequestTimeout(uint(5000))
-                        .build();
-            }
-
-            opcClient = new OpcUaClient(cfg);
+            OpcUaClientConfigBuilder cfg = new OpcUaClientConfigBuilder();
+            cfg.setEndpoint(endpointDescription);
+            opcClient = new OpcUaClient(cfg.build());
             opcClient.connect().get();
 
 
@@ -243,7 +168,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             StringBuilder serverResponse = new StringBuilder();
 
             for (int i = 0; i < tagNames.size(); i++) {
-                String valueLine = "";
+                String valueLine;
                 try {
                     if (excludeNullValue && rvList.get(i).getValue().getValue().toString().equals(nullValueString)) {
                         getLogger().debug("Null value returned for " + rvList.get(i).getValue().getValue().toString()
@@ -273,28 +198,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     }
 
 
-    private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
-
-        // TODO: maybe use StringBuilder for better performance
-        String valueLine = "";
-
-        valueLine += tagName + ',';
-
-        if (("ServerTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine += value.getServerTime().getJavaTime() + ",";
-        }
-        if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine += value.getSourceTime().getJavaTime() + ",";
-        }
-
-        valueLine += value.getValue().getValue().toString() + ","
-                + value.getStatusCode().getValue()
-                + System.getProperty("line.separator");
-
-        return valueLine;
-    }
-
-
     @Override
     public byte[] getNodes(String indentString, int maxRecursiveDepth, int maxReferencePerNode,
                            boolean printNonLeafNode, String rootNodeId)
@@ -318,7 +221,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     }
 
     @Override
-    public String subscribe(List<String> tagNames, BlockingQueue<String> queue) throws ProcessException {
+    public String subscribe(List<String> tagNames, BlockingQueue<String> queue, boolean tsChangedNotify) throws ProcessException {
 
         if (subscriberMap == null) {
             subscriberMap = new HashMap<>();
@@ -342,10 +245,17 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 Long clientHandleLong = clientHandles.getAndIncrement();
                 UInteger clientHandle = uint(clientHandleLong);
 
+                // Important!
+                // If we apply this filter in MonitoringParameters, now not only we will get data when value changes,
+                // we will also get data even value doesn't change, but the timestamp has changed.
+                // If it is null, then the default DataChangeFilter will be used, which only get data when its value changes.
+                DataChangeFilter df = tsChangedNotify?
+                        new DataChangeFilter(DataChangeTrigger.from(2), null, null) : null;
+
                 MonitoringParameters parameters = new MonitoringParameters(
                         clientHandle,
-                        1000.0,     // sampling interval
-                        null,       // filter, null means use default
+                        300.0,     // sampling interval
+                        ExtensionObject.encode(df),       // filter, null means use default
                         uint(10),   // queue size
                         true        // discard oldest
                 );
@@ -363,7 +273,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                         String valueLine = writeCsv(getFullName(it.getReadValueId().getNodeId()),
                                 "Both", value);
 
-                        queue.offer(valueLine);
+                        if(valueLine != null) {
+                            queue.offer(valueLine);
+                        }
+
                     });
 
             List<UaMonitoredItem> items = uaSubscription.createMonitoredItems(
@@ -411,7 +324,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             }
         }
 
-        // TODO: maybe return boolean as result?
     }
 
     // remainDepth = 0 means only print out the current node
@@ -488,4 +400,23 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         return sb.toString();
     }
 
+    private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
+
+        StringBuilder valueLine = new StringBuilder();
+
+        valueLine.append(tagName).append(",");
+
+        if (("ServerTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
+            valueLine.append(value.getServerTime().getJavaTime()).append(",");
+        }
+        if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
+            valueLine.append(value.getSourceTime().getJavaTime()).append(",");
+        }
+
+        valueLine.append(value.getValue().getValue().toString()).
+                append(value.getStatusCode().getValue()).
+                append(System.getProperty("line.separator"));
+
+        return valueLine.toString();
+    }
 }

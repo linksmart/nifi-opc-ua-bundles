@@ -17,6 +17,7 @@
 package de.fraunhofer.fit.processors.opcua;
 
 import de.fraunhofer.fit.opcua.OPCUAService;
+import de.fraunhofer.fit.processors.opcua.utils.RecordAggregator;
 import org.apache.nifi.annotation.documentation.CapabilityDescription;
 import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
@@ -46,7 +47,11 @@ public class SubscribeOPCNodes extends AbstractProcessor {
 
     private OPCUAService opcUaService;
     private BlockingQueue<String> msgQueue;
+    private List<String> tagNames;
     private String subscriberUid;
+    private boolean aggregateRecord;
+    private boolean tsChangedNotify;
+    private RecordAggregator recordAggregator;
 
     public static final PropertyDescriptor OPCUA_SERVICE = new PropertyDescriptor.Builder()
             .name("OPC UA Service")
@@ -56,10 +61,30 @@ public class SubscribeOPCNodes extends AbstractProcessor {
             .build();
 
     public static final PropertyDescriptor TAG_FILE_LOCATION = new PropertyDescriptor
-            .Builder().name("Location of the Tag List File")
+            .Builder().name("Tag List File Location")
             .description("The location of the tag list file")
             .required(true)
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
+            .sensitive(false)
+            .build();
+
+    public static final PropertyDescriptor AGGREGATE_RECORD = new PropertyDescriptor
+            .Builder().name("Aggregate Records")
+            .description("Whether to aggregate records. If this is set to true, then variable with the same time stamp will be merged into a single line. This is useful for batch-based data.")
+            .required(true)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .sensitive(false)
+            .build();
+
+    public static final PropertyDescriptor TS_CHANGE_NOTIFY = new PropertyDescriptor
+            .Builder().name("Notified when Timestamp changed")
+            .description("Whether the data should be collected, when only the timestamp of a variable has changed, but not its value.")
+            .required(true)
+            .defaultValue("true")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
             .sensitive(false)
             .build();
 
@@ -82,6 +107,8 @@ public class SubscribeOPCNodes extends AbstractProcessor {
         final List<PropertyDescriptor> descriptors = new ArrayList<>();
         descriptors.add(OPCUA_SERVICE);
         descriptors.add(TAG_FILE_LOCATION);
+        descriptors.add(AGGREGATE_RECORD);
+        descriptors.add(TS_CHANGE_NOTIFY);
 
         this.descriptors = Collections.unmodifiableList(descriptors);
 
@@ -109,7 +136,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
         opcUaService = context.getProperty(OPCUA_SERVICE)
                 .asControllerService(OPCUAService.class);
 
-        List<String> tagNames;
+
         try {
             tagNames = parseFile(Paths.get(context.getProperty(TAG_FILE_LOCATION).toString()));
         } catch (IOException e) {
@@ -117,32 +144,68 @@ public class SubscribeOPCNodes extends AbstractProcessor {
             return;
         }
 
-        subscriberUid = opcUaService.subscribe(tagNames, msgQueue);
+        aggregateRecord = Boolean.valueOf(context.getProperty(AGGREGATE_RECORD).getValue());
+        tsChangedNotify = Boolean.valueOf(context.getProperty(TS_CHANGE_NOTIFY).getValue());
+        subscriberUid = opcUaService.subscribe(tagNames, msgQueue, tsChangedNotify);
+
+        recordAggregator = new RecordAggregator(tagNames);
 
     }
 
     @Override
     public void onTrigger(final ProcessContext context, final ProcessSession session) throws ProcessException {
 
-        String msg;
-        System.out.println("OnTrigger called! there are so many messages here: " + msgQueue.size());
-        while ((msg = msgQueue.poll()) != null) {
-            // Write the results back out to a flow file
-            FlowFile flowFile = session.create();
+        if(!aggregateRecord) {
+            String msg;
+            while ((msg = msgQueue.poll()) != null) {
+                // Write the results back out to a flow file
+                FlowFile flowFile = session.create();
 
-            byte[] outputMsgBytes = msg.getBytes();
-            if (flowFile != null) {
-                try {
-                    flowFile = session.write(flowFile, (OutputStream out) -> out.write(outputMsgBytes));
+                byte[] outputMsgBytes = msg.getBytes();
+                if (flowFile != null) {
+                    try {
+                        flowFile = session.write(flowFile, (OutputStream out) -> out.write(outputMsgBytes));
 
-                    // Transfer data to flow file
-                    session.transfer(flowFile, SUCCESS);
-                } catch (ProcessException ex) {
-                    getLogger().error("Unable to process", ex);
-                    session.transfer(flowFile, FAILURE);
+                        // Transfer data to flow file
+                        session.transfer(flowFile, SUCCESS);
+                    } catch (ProcessException ex) {
+                        getLogger().error("Unable to process", ex);
+                        session.transfer(flowFile, FAILURE);
+                    }
                 }
             }
+        } else {
+            String rawMsg;
+            while ((rawMsg = msgQueue.poll()) != null) {
+                recordAggregator.aggregate(rawMsg);
+            }
+
+            List<String> list = recordAggregator.getReadyRecords();
+            for(String msg: list) {
+                // Write the results back out to a flow file
+                FlowFile flowFile = session.create();
+
+                byte[] outputMsgBytes = msg.getBytes();
+                if (flowFile != null) {
+                    try {
+                        flowFile = session.write(flowFile, (OutputStream out) -> out.write(outputMsgBytes));
+
+                        // add header to attribute (remember to add time stamp colum to the first)
+                        Map<String, String> attrMap = new HashMap<>();
+                        attrMap.put("csvHeader", "timestamp," + String.join(",", tagNames) + System.getProperty("line.separator"));
+                        flowFile = session.putAllAttributes(flowFile, attrMap);
+
+                        // Transfer data to flow file
+                        session.transfer(flowFile, SUCCESS);
+                    } catch (ProcessException ex) {
+                        getLogger().error("Unable to process", ex);
+                        session.transfer(flowFile, FAILURE);
+                    }
+                }
+            }
+            recordAggregator.clearReadyRecord();
         }
+
     }
 
     @OnStopped

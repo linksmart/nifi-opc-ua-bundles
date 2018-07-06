@@ -110,6 +110,16 @@ public class GetOPCData extends AbstractProcessor {
             .addValidator(Validator.VALID)
             .build();
 
+    public static final PropertyDescriptor AGGREGATE_RECORD = new PropertyDescriptor
+            .Builder().name("Aggregate Records")
+            .description("Whether to aggregate records. If this is set to true, then variable with the same time stamp will be merged into a single line. This is useful for batch-based data.")
+            .required(true)
+            .defaultValue("false")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .sensitive(false)
+            .build();
+
     public static final Relationship SUCCESS = new Relationship.Builder()
             .name("Success")
             .description("Successful OPC read")
@@ -134,6 +144,7 @@ public class GetOPCData extends AbstractProcessor {
         descriptors.add(TAG_LIST_FILE);
         descriptors.add(TAG_LIST_SOURCE);
         descriptors.add(TAG_LIST_FILE_CACHE);
+        descriptors.add(AGGREGATE_RECORD);
         this.descriptors = Collections.unmodifiableList(descriptors);
 
         final Set<Relationship> relationships = new HashSet<Relationship>();
@@ -220,18 +231,27 @@ public class GetOPCData extends AbstractProcessor {
             }
         }
 
-        byte[] values = opcUAService.getValue(requestedTagnames.get(), timestamp.get(),
-                excludeNullValue.get(), nullValueString);
-
         FlowFile flowFile;
         flowFile = session.get();
-
         if (flowFile == null)
             flowFile = session.create();
 
+        byte[] values = opcUAService.getValue(requestedTagnames.get(), timestamp.get(),
+                excludeNullValue.get(), nullValueString);
+
+        if(context.getProperty(AGGREGATE_RECORD).asBoolean()) {
+            values = mergeRecord(values).getBytes();
+            // add csvHeader attribute to flowfile
+            Map<String, String> attrMap = new HashMap<>();
+            attrMap.put("csvHeader", "timestamp," + String.join(",", requestedTagnames.get()));
+            flowFile = session.putAllAttributes(flowFile, attrMap);
+        }
+
+        byte[] payload = values;
+
         // Write the results back out to flow file
         try {
-            flowFile = session.write(flowFile, out -> out.write(values));
+            flowFile = session.write(flowFile, out -> out.write(payload));
             session.transfer(flowFile, SUCCESS);
         } catch (ProcessException ex) {
             getLogger().error("Unable to process", ex);
@@ -247,4 +267,42 @@ public class GetOPCData extends AbstractProcessor {
         String fileContent = new String(encoded, Charset.defaultCharset());
         return new BufferedReader(new StringReader(fileContent)).lines().collect(Collectors.toList());
     }
+
+    private String mergeRecord(byte[] values) {
+
+        int SOURCE_TS_INDEX;
+        int VALUE_INDEX;
+        int STATUS_CODE_INDEX;
+
+        if (!timestamp.get().equals("Both")) {
+            SOURCE_TS_INDEX = 1;
+            VALUE_INDEX = 2;
+            STATUS_CODE_INDEX = 3;
+        } else {
+            SOURCE_TS_INDEX = 2;
+            VALUE_INDEX = 3;
+            STATUS_CODE_INDEX = 4;
+        }
+
+        String[] rawMsgs = new String(values).split(System.lineSeparator());
+        if(rawMsgs.length == 0) return "";
+
+        StringBuilder sb = new StringBuilder();
+        // Use the source timestamp of the first element as the timestamp
+
+        boolean tsAppended = false;
+        for(int i=0; i<rawMsgs.length; i++) {
+            String[] fields = rawMsgs[i].trim().split(",");
+            if (!fields[STATUS_CODE_INDEX].equals("0")) continue;
+            if (!tsAppended) {
+                sb.append(fields[SOURCE_TS_INDEX]).append(",");
+                tsAppended = true;
+            }
+            sb.append(fields[VALUE_INDEX]);
+            if( i < (rawMsgs.length - 1)) sb.append(",");
+        }
+
+        return sb.toString();
+    }
+
 }
