@@ -272,29 +272,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     }
 
-
-    private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
-
-        // TODO: maybe use StringBuilder for better performance
-        String valueLine = "";
-
-        valueLine += tagName + ',';
-
-        if (("ServerTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine += value.getServerTime().getJavaTime() + ",";
-        }
-        if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine += value.getSourceTime().getJavaTime() + ",";
-        }
-
-        valueLine += value.getValue().getValue().toString() + ","
-                + value.getStatusCode().getValue()
-                + System.getProperty("line.separator");
-
-        return valueLine;
-    }
-
-
     @Override
     public byte[] getNodes(String indentString, int maxRecursiveDepth, int maxReferencePerNode,
                            boolean printNonLeafNode, String rootNodeId)
@@ -486,6 +463,27 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                     .length())));
         }
         return sb.toString();
+    }
+
+    private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
+
+        // TODO: maybe use StringBuilder for better performance
+        String valueLine = "";
+
+        valueLine += tagName + ',';
+
+        if (("ServerTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
+            valueLine += value.getServerTime().getJavaTime() + ",";
+        }
+        if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
+            valueLine += value.getSourceTime().getJavaTime() + ",";
+        }
+
+        valueLine += value.getValue().getValue().toString() + ","
+                + value.getStatusCode().getValue()
+                + System.getProperty("line.separator");
+
+        return valueLine;
     }
 
 }
