@@ -66,7 +66,7 @@ public class ListOPCNodes extends AbstractProcessor {
     public static final PropertyDescriptor STARTING_NODE = new PropertyDescriptor
             .Builder().name("Starting Nodes")
             .description("From what node should Nifi begin browsing the node tree. Default is the root node. Seperate multiple nodes with a comma (,)")
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .addValidator(StandardValidators.NON_BLANK_VALIDATOR)
             .build();
 
     public static final PropertyDescriptor RECURSIVE_DEPTH = new PropertyDescriptor

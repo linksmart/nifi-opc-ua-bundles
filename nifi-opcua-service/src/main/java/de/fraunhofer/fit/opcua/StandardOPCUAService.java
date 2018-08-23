@@ -33,6 +33,7 @@ import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription;
 import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
+import org.eclipse.milo.opcua.stack.core.Identifiers;
 import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
 import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
 import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
@@ -208,9 +209,16 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 throw new Exception("OPC Client is null. OPC UA service was not enabled properly.");
             }
 
+            NodeId nodeId;
+            if (rootNodeId == null || rootNodeId.isEmpty()) {
+                nodeId = Identifiers.RootFolder;
+            } else {
+                nodeId = NodeId.parse(rootNodeId);
+            }
+
             StringBuilder builder = new StringBuilder();
             browseNodeIteratively("", indentString, maxRecursiveDepth, maxReferencePerNode, printNonLeafNode,
-                    opcClient, NodeId.parse(rootNodeId), builder);
+                    opcClient, nodeId, builder);
 
             return builder.toString().getBytes();
 
