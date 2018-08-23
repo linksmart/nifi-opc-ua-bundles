@@ -77,18 +77,10 @@ public class GetOPCData extends AbstractProcessor {
             .build();
 
     public static final PropertyDescriptor TAG_LIST_FILE = new PropertyDescriptor
-            .Builder().name("Default Tag List Name")
+            .Builder().name("Tag List Location")
             .description("The location of the tag list file")
             .required(true)
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
-            .sensitive(false)
-            .build();
-
-    public static final PropertyDescriptor TAG_LIST_FILE_CACHE = new PropertyDescriptor
-            .Builder().name("Tag List Cache Expiry Time")
-            .description("The number of seconds between tag list re-reads")
-            .required(false)
-            .addValidator(StandardValidators.INTEGER_VALIDATOR)
             .sensitive(false)
             .build();
 
@@ -143,7 +135,6 @@ public class GetOPCData extends AbstractProcessor {
         descriptors.add(NULL_VALUE_STRING);
         descriptors.add(TAG_LIST_FILE);
         descriptors.add(TAG_LIST_SOURCE);
-        descriptors.add(TAG_LIST_FILE_CACHE);
         descriptors.add(AGGREGATE_RECORD);
         this.descriptors = Collections.unmodifiableList(descriptors);
 
