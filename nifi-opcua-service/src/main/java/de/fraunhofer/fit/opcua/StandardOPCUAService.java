@@ -175,6 +175,8 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 throw new RuntimeException("No endpoint with the specified security policy was found.");
             }
 
+            // TODO: Before connecting, I have to verify server certificate myself. Because Milo doesn't come with server cert verification
+
             OpcUaClientConfig cfg = null;
             if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) { // If no security policy is used
 
