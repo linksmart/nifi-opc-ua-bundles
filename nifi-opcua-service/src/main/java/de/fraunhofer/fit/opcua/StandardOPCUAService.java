@@ -27,23 +27,27 @@ import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.reporting.InitializationException;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
+import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfig;
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder;
+import org.eclipse.milo.opcua.sdk.client.api.identity.AnonymousProvider;
+import org.eclipse.milo.opcua.sdk.client.api.identity.IdentityProvider;
+import org.eclipse.milo.opcua.sdk.client.api.identity.UsernameProvider;
 import org.eclipse.milo.opcua.sdk.client.api.nodes.Node;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription;
 import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
-import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
-import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
-import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
-import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
+import org.eclipse.milo.opcua.stack.core.types.builtin.*;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.DataChangeTrigger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn;
 import org.eclipse.milo.opcua.stack.core.types.structured.*;
 
+import java.io.ByteArrayInputStream;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
@@ -65,10 +69,80 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     public static final PropertyDescriptor SECURITY_POLICY = new PropertyDescriptor
             .Builder().name("Security Policy")
-            .description("How should Nifi create the connection with the UA server")
+            .description("What security policy to use for connection with OPC UA server")
             .required(true)
             .allowableValues("None", "Basic128Rsa15", "Basic256", "Basic256Rsa256")
             .defaultValue("None")
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor SECURITY_MODE = new PropertyDescriptor
+            .Builder().name("Security Mode")
+            .description("What security mode to use for connection with OPC UA server. Only valid when \"Security Policy\" isn't \"None\".")
+            .required(true)
+            .allowableValues("Sign", "SignAndEncrypt")
+            .defaultValue("Sign")
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor CLIENT_KS_LOCATION = new PropertyDescriptor
+            .Builder().name("Client Keystore Location")
+            .description("The location of the client keystore. Only valid when \"Security Policy\" isn't \"None\". " +
+                    "The keystore should contain only one keypair entry (private key + certificate). " +
+                    "If multiple entries exist, the first one is used. " +
+                    "Besides, the key should have the same password as the keystore.")
+            .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor CLIENT_KS_PASSWORD = new PropertyDescriptor
+            .Builder().name("Client Keystore Password")
+            .description("The password for the client keystore")
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor REQUIRE_SERVER_AUTH = new PropertyDescriptor
+            .Builder().name("Require server authentication")
+            .description("Whether we need to authenticate by verifying its certificate against the trust store.")
+            .allowableValues("true", "false")
+            .defaultValue("true")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor TRUSTSTORE_LOCATION = new PropertyDescriptor
+            .Builder().name("Trust store Location")
+            .description("The location of the trust store. Only valid when \"Security Policy\" isn't \"None\". " +
+                    "Trust store contains trusted certificates, which are to be used for server identity verification." +
+                    "The trust store can contain multiple certificates.")
+            .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor TRUSTSTORE_PASSWORD = new PropertyDescriptor
+            .Builder().name("Trust store Password")
+            .description("The password for the trust store")
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor AUTH_POLICY = new PropertyDescriptor
+            .Builder().name("Authentication Policy")
+            .description("How should Nifi authenticate with the UA server")
+            .required(true)
+            .defaultValue("Anon")
+            .allowableValues("Anon", "Username")
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor USERNAME = new PropertyDescriptor
+            .Builder().name("User Name")
+            .description("The user name to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
+            .required(false)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor PASSWORD = new PropertyDescriptor
+            .Builder().name("Password")
+            .description("The password to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
+            .required(false)
+            .sensitive(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
@@ -76,11 +150,21 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     private final String SECURITY_POLICY_PREFIX = "http://opcfoundation.org/UA/SecurityPolicy#";
 
-    private String endpoint;
-    private String securityPolicy;
+
     private OpcUaClient opcClient;
     private UaSubscription uaSubscription;
     private Map<String, List<UaMonitoredItem>> subscriberMap;
+    private String endpoint;
+    private String securityPolicy;
+    private int securityModeValue;
+    private String clientKsLocation;
+    private char[] clientKsPassword;
+    private boolean requireServerAuth;
+    private String trustStoreLocation;
+    private char[] trustStorePassword;
+    private String userName;
+    private String password;
+    private String authType;
 
     private final AtomicLong clientHandles = new AtomicLong(1L);
 
@@ -88,6 +172,15 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         final List<PropertyDescriptor> props = new ArrayList<>();
         props.add(ENDPOINT);
         props.add(SECURITY_POLICY);
+        props.add(SECURITY_MODE);
+        props.add(CLIENT_KS_LOCATION);
+        props.add(CLIENT_KS_PASSWORD);
+        props.add(REQUIRE_SERVER_AUTH);
+        props.add(TRUSTSTORE_LOCATION);
+        props.add(TRUSTSTORE_PASSWORD);
+        props.add(AUTH_POLICY);
+        props.add(USERNAME);
+        props.add(PASSWORD);
         properties = Collections.unmodifiableList(props);
     }
 
@@ -104,7 +197,29 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     public void onEnabled(final ConfigurationContext context) throws InitializationException {
 
         endpoint = context.getProperty(ENDPOINT).getValue();
+        clientKsLocation = context.getProperty(CLIENT_KS_LOCATION).getValue();
+        clientKsPassword = context.getProperty(CLIENT_KS_PASSWORD).getValue() != null ?
+                context.getProperty(CLIENT_KS_PASSWORD).getValue().toCharArray() : new char[0];
+        authType = context.getProperty(AUTH_POLICY).getValue();
+        requireServerAuth = context.getProperty(REQUIRE_SERVER_AUTH).asBoolean();
+        trustStoreLocation = context.getProperty(TRUSTSTORE_LOCATION).getValue();
+        trustStorePassword = context.getProperty(TRUSTSTORE_PASSWORD).getValue()!= null ?
+                context.getProperty(TRUSTSTORE_PASSWORD).getValue().toCharArray() : new char[0];
+        userName = context.getProperty(USERNAME).getValue();
+        password = context.getProperty(PASSWORD).getValue();
+
         securityPolicy = SECURITY_POLICY_PREFIX + context.getProperty(SECURITY_POLICY).getValue();
+
+        // Get the Security Mode value: 1 - None; 2 - Sign; 3 - Sign and Encrypt
+        if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) {
+            securityModeValue = 1;
+        } else {
+            if (context.getProperty(SECURITY_MODE).getValue().equals("Sign")) {
+                securityModeValue = 2;
+            } else {
+                securityModeValue = 3;
+            }
+        }
 
         try {
             EndpointDescription[] endpoints =
@@ -112,22 +227,66 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             EndpointDescription endpointDescription = null;
             for (EndpointDescription ed : endpoints) {
-                getLogger().info("Endpoint: " + ed.getEndpointUrl() + " security: " + ed.getSecurityPolicyUri());
-                if (ed.getSecurityPolicyUri().equals(securityPolicy)) {
+
+                if (ed.getSecurityPolicyUri().equals(securityPolicy)
+                        && ed.getSecurityMode().getValue() == securityModeValue) {
                     endpointDescription = ed;
-                    getLogger().info("Connecting to endpoint " + ed.getEndpointUrl()
-                            + " with security policy " + ed.getSecurityPolicyUri());
+                    getLogger().debug("*** Connecting to endpoint " + ed.getEndpointUrl()
+                            + " with security policy " + ed.getSecurityPolicyUri()
+                            + " and security mode " + ed.getSecurityMode().name());
                 }
             }
 
             if (endpointDescription == null) {
                 getLogger().error("No endpoint with the specified security policy was found.");
-                throw new RuntimeException("No endpoint with the specified security policy was found.");
+                throw new InitializationException("No endpoint with the specified security policy was found.");
             }
 
-            OpcUaClientConfigBuilder cfg = new OpcUaClientConfigBuilder();
-            cfg.setEndpoint(endpointDescription);
-            opcClient = new OpcUaClient(cfg.build());
+            OpcUaClientConfig cfg = null;
+            if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) { // If no security policy is used
+
+                cfg = new OpcUaClientConfigBuilder()
+                        .setEndpoint(endpointDescription)
+                        .build();
+
+            } else {  // If security policy is used
+
+                // Verify server certificate against the trust store
+                if (requireServerAuth) {
+                    if (trustStoreLocation == null) {
+                        getLogger().error("Server authentication is required but no trust store is provided");
+                        throw new InitializationException("No trust store specified");
+                    }
+                    TrustStoreLoader tsLoader = new TrustStoreLoader().load(trustStoreLocation, trustStorePassword);
+                    CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+                    Certificate serverCert = certFactory.generateCertificate(
+                            new ByteArrayInputStream(endpointDescription.getServerCertificate().bytes()));
+                    if (!tsLoader.verify(serverCert)) {
+                        getLogger().error("Cannot verify server certificate. Please make sure you have added the server certificate to the trust store.");
+                        throw new InitializationException("Server certificate verification error");
+                    }
+                }
+
+                // Generate self-signed certificate according to application name, or retrieve already generated one
+                if (clientKsLocation == null) {
+                    getLogger().error("Security policy is specified but no keystore is specified.");
+                    throw new InitializationException("No client keystore specified");
+                }
+                KeyStoreLoader loader = new KeyStoreLoader().load(clientKsLocation, clientKsPassword);
+
+                IdentityProvider identityProvider = authType.equals("Anon") ? new AnonymousProvider()
+                        : new UsernameProvider(userName, password);
+
+                cfg = OpcUaClientConfig.builder()
+                        .setCertificate(loader.getClientCertificate())
+                        .setKeyPair(loader.getClientKeyPair())
+                        .setEndpoint(endpointDescription)
+                        .setIdentityProvider(identityProvider)
+                        .setRequestTimeout(uint(5000))
+                        .build();
+            }
+
+            opcClient = new OpcUaClient(cfg);
             opcClient.connect().get();
 
 

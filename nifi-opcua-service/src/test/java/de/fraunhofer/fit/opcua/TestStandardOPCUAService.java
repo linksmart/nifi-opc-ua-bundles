@@ -16,22 +16,30 @@
  */
 package de.fraunhofer.fit.opcua;
 
+import org.apache.nifi.reporting.InitializationException;
+import org.apache.nifi.util.TestRunner;
+import org.apache.nifi.util.TestRunners;
 import org.junit.Before;
+import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.List;
 
 public class TestStandardOPCUAService {
 
     private final String endpoint = "opc.tcp://10.223.104.20:48010";
+    private TestRunner runner;
+    private StandardOPCUAService service;
 
     @Before
-    public void init() {
-
+    public void init() throws InitializationException {
+        runner = TestRunners.newTestRunner(TestProcessor.class);
+        service = new StandardOPCUAService();
+        runner.addControllerService("test-good", service);
     }
 
-/*    @Test
-    public void testServiceInitialization() throws InitializationException {
-        final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
-        final StandardOPCUAService service = new StandardOPCUAService();
-        runner.addControllerService("test-good", service);
+    @Test
+    public void testServiceInitialization() {
 
         runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
         runner.assertValid(service);
@@ -43,28 +51,20 @@ public class TestStandardOPCUAService {
     }
 
     @Test
-    public void testServiceGetNodes() throws InitializationException {
-        final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
-        final StandardOPCUAService service = new StandardOPCUAService();
-        runner.addControllerService("test-good", service);
-
+    public void testServiceGetNodes() {
         runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
         runner.assertValid(service);
 
         runner.enableControllerService(service);
 
-        System.out.println(service.getNodes("--", 3, 10, false,
-                "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars"));
+        System.out.println(new String(service.getNodes("--", 3, 10, false,
+                "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars")));
 
         runner.disableControllerService(service);
     }
 
     @Test
-    public void testServiceGetValues() throws InitializationException {
-        final TestRunner runner = TestRunners.newTestRunner(TestProcessor.class);
-        final StandardOPCUAService service = new StandardOPCUAService();
-        runner.addControllerService("test-good", service);
-
+    public void testServiceGetValues() {
         runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
         runner.assertValid(service);
 
@@ -74,9 +74,59 @@ public class TestStandardOPCUAService {
                 "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG2_EXT");
 
         byte[] bytes = service.getValue(tagList, "Both", true, "");
-        System.out.println (new String(bytes));
+        System.out.println(new String(bytes));
 
         runner.disableControllerService(service);
-    }*/
+    }
+
+    @Test
+    public void testSecurityAccess() {
+        runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
+        runner.setProperty(service, StandardOPCUAService.SECURITY_POLICY, "Basic128Rsa15");
+        runner.setProperty(service, StandardOPCUAService.SECURITY_MODE, "SignAndEncrypt");
+        runner.setProperty(service, StandardOPCUAService.CLIENT_KS_LOCATION, "src/test/resources/client.jks");
+        runner.setProperty(service, StandardOPCUAService.CLIENT_KS_PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_LOCATION, "src/test/resources/server.jks");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.AUTH_POLICY, "Anon");
+
+        runner.assertValid(service);
+
+        runner.enableControllerService(service);
+
+        List<String> tagList = Arrays.asList("ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG1_EXT",
+                "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG2_EXT");
+
+        byte[] bytes = service.getValue(tagList, "Both", true, "");
+        System.out.println(new String(bytes));
+
+        runner.disableControllerService(service);
+    }
+
+    @Test
+    public void testUsernameSecurityAccess() {
+        runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
+        runner.setProperty(service, StandardOPCUAService.SECURITY_POLICY, "Basic128Rsa15");
+        runner.setProperty(service, StandardOPCUAService.SECURITY_MODE, "SignAndEncrypt");
+        runner.setProperty(service, StandardOPCUAService.CLIENT_KS_LOCATION, "src/test/resources/client.jks");
+        runner.setProperty(service, StandardOPCUAService.CLIENT_KS_PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_LOCATION, "src/test/resources/server.jks");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.AUTH_POLICY, "Username");
+        runner.setProperty(service, StandardOPCUAService.USERNAME, "test1");
+        runner.setProperty(service, StandardOPCUAService.PASSWORD, "password");
+
+        runner.assertValid(service);
+
+        runner.enableControllerService(service);
+
+        List<String> tagList = Arrays.asList("ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG1_EXT",
+                "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG2_EXT");
+
+        byte[] bytes = service.getValue(tagList, "Both", true, "");
+        System.out.println(new String(bytes));
+
+        runner.disableControllerService(service);
+    }
 
 }
