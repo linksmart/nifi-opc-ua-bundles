@@ -60,7 +60,7 @@ public class GetOPCDataTest {
     @Test
     public void testGetData() {
 
-        String tagFilePath = (new File("src\\test\\resources\\tags.txt")).getAbsolutePath();
+        String tagFilePath = (new File("src/test/resources/tags.txt")).getAbsolutePath();
 
         testRunner.setProperty(GetOPCData.OPCUA_SERVICE, "controller");
         testRunner.setProperty(GetOPCData.RETURN_TIMESTAMP, "Both");
@@ -87,7 +87,7 @@ public class GetOPCDataTest {
     @Test
     public void testGetDataWithAggregation() {
 
-        String tagFilePath = (new File("src\\test\\resources\\tags.txt")).getAbsolutePath();
+        String tagFilePath = (new File("src/test/resources/tags.txt")).getAbsolutePath();
 
         testRunner.setProperty(GetOPCData.OPCUA_SERVICE, "controller");
         testRunner.setProperty(GetOPCData.RETURN_TIMESTAMP, "Both");

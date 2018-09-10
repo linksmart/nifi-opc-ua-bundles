@@ -63,7 +63,7 @@ public class SubscribeOPCNodesTest {
     @Test
     public void testAggregateRecords() throws Exception {
 
-        String tagFilePath = (new File("src\\test\\resources\\husky_tags.txt")).getAbsolutePath();
+        String tagFilePath = (new File("src/test/resources/husky_tags.txt")).getAbsolutePath();
 
         String queueString =
                 "ns=2;s=47.ProcessVariables.Shot_Length,1528285608582,1528285608582,38.71,0\n" +
