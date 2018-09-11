@@ -65,6 +65,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .description("the opc.tcp address of the opc ua server")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .expressionLanguageSupported(true)
             .build();
 
     public static final PropertyDescriptor SECURITY_POLICY = new PropertyDescriptor
@@ -196,7 +197,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     @OnEnabled
     public void onEnabled(final ConfigurationContext context) throws InitializationException {
 
-        endpoint = context.getProperty(ENDPOINT).getValue();
+        endpoint = context.getProperty(ENDPOINT).evaluateAttributeExpressions().getValue();
         clientKsLocation = context.getProperty(CLIENT_KS_LOCATION).getValue();
         clientKsPassword = context.getProperty(CLIENT_KS_PASSWORD).getValue() != null ?
                 context.getProperty(CLIENT_KS_PASSWORD).getValue().toCharArray() : new char[0];
