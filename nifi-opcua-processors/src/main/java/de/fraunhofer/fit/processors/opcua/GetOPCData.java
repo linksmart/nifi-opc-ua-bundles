@@ -82,6 +82,7 @@ public class GetOPCData extends AbstractProcessor {
             .required(true)
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
             .sensitive(false)
+            .expressionLanguageSupported(true)
             .build();
 
     public static final PropertyDescriptor EXCLUDE_NULL_VALUE = new PropertyDescriptor
@@ -133,8 +134,8 @@ public class GetOPCData extends AbstractProcessor {
         descriptors.add(RETURN_TIMESTAMP);
         descriptors.add(EXCLUDE_NULL_VALUE);
         descriptors.add(NULL_VALUE_STRING);
-        descriptors.add(TAG_LIST_FILE);
         descriptors.add(TAG_LIST_SOURCE);
+        descriptors.add(TAG_LIST_FILE);
         descriptors.add(AGGREGATE_RECORD);
         this.descriptors = Collections.unmodifiableList(descriptors);
 
@@ -166,7 +167,7 @@ public class GetOPCData extends AbstractProcessor {
         // Now every time onSchedule is triggered, data will be read from file anew
         if (context.getProperty(TAG_LIST_SOURCE).toString().equals("Local File")) {
             try {
-                tagList = parseFile(Paths.get(context.getProperty(TAG_LIST_FILE).toString()));
+                tagList = parseFile(Paths.get(context.getProperty(TAG_LIST_FILE).evaluateAttributeExpressions().toString()));
             } catch (IOException e) {
                 getLogger().error("Error reading tag list from local file.");
             }

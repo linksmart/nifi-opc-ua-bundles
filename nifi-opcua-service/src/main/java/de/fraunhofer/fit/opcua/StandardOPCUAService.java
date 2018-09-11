@@ -93,19 +93,21 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                     "If multiple entries exist, the first one is used. " +
                     "Besides, the key should have the same password as the keystore.")
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
+            .expressionLanguageSupported(true)
             .build();
 
     public static final PropertyDescriptor CLIENT_KS_PASSWORD = new PropertyDescriptor
             .Builder().name("Client Keystore Password")
             .description("The password for the client keystore")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .expressionLanguageSupported(true)
             .build();
 
     public static final PropertyDescriptor REQUIRE_SERVER_AUTH = new PropertyDescriptor
             .Builder().name("Require server authentication")
-            .description("Whether we need to authenticate by verifying its certificate against the trust store.")
+            .description("Whether to authenticate server by verifying its certificate against the trust store. It is recommended to disable this option for quick test, but enable it for production.")
             .allowableValues("true", "false")
-            .defaultValue("true")
+            .defaultValue("false")
             .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
             .build();
 
@@ -115,12 +117,14 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                     "Trust store contains trusted certificates, which are to be used for server identity verification." +
                     "The trust store can contain multiple certificates.")
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
+            .expressionLanguageSupported(true)
             .build();
 
     public static final PropertyDescriptor TRUSTSTORE_PASSWORD = new PropertyDescriptor
             .Builder().name("Trust store Password")
             .description("The password for the trust store")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .expressionLanguageSupported(true)
             .build();
 
     public static final PropertyDescriptor AUTH_POLICY = new PropertyDescriptor
@@ -137,6 +141,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .description("The user name to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .expressionLanguageSupported(true)
             .build();
 
     public static final PropertyDescriptor PASSWORD = new PropertyDescriptor
@@ -145,6 +150,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .required(false)
             .sensitive(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .expressionLanguageSupported(true)
             .build();
 
     private static final List<PropertyDescriptor> properties;
@@ -155,17 +161,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     private OpcUaClient opcClient;
     private UaSubscription uaSubscription;
     private Map<String, List<UaMonitoredItem>> subscriberMap;
-    private String endpoint;
-    private String securityPolicy;
-    private int securityModeValue;
-    private String clientKsLocation;
-    private char[] clientKsPassword;
-    private boolean requireServerAuth;
-    private String trustStoreLocation;
-    private char[] trustStorePassword;
-    private String userName;
-    private String password;
-    private String authType;
 
     private final AtomicLong clientHandles = new AtomicLong(1L);
 
@@ -197,21 +192,14 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     @OnEnabled
     public void onEnabled(final ConfigurationContext context) throws InitializationException {
 
-        endpoint = context.getProperty(ENDPOINT).evaluateAttributeExpressions().getValue();
-        clientKsLocation = context.getProperty(CLIENT_KS_LOCATION).getValue();
-        clientKsPassword = context.getProperty(CLIENT_KS_PASSWORD).getValue() != null ?
-                context.getProperty(CLIENT_KS_PASSWORD).getValue().toCharArray() : new char[0];
-        authType = context.getProperty(AUTH_POLICY).getValue();
-        requireServerAuth = context.getProperty(REQUIRE_SERVER_AUTH).asBoolean();
-        trustStoreLocation = context.getProperty(TRUSTSTORE_LOCATION).getValue();
-        trustStorePassword = context.getProperty(TRUSTSTORE_PASSWORD).getValue()!= null ?
-                context.getProperty(TRUSTSTORE_PASSWORD).getValue().toCharArray() : new char[0];
-        userName = context.getProperty(USERNAME).getValue();
-        password = context.getProperty(PASSWORD).getValue();
-
-        securityPolicy = SECURITY_POLICY_PREFIX + context.getProperty(SECURITY_POLICY).getValue();
+        String endpoint = context.getProperty(ENDPOINT).evaluateAttributeExpressions().getValue();
+        if (endpoint == null) {
+            throw new InitializationException("Endpoint can't be null.");
+        }
+        String securityPolicy = SECURITY_POLICY_PREFIX + context.getProperty(SECURITY_POLICY).getValue();
 
         // Get the Security Mode value: 1 - None; 2 - Sign; 3 - Sign and Encrypt
+        int securityModeValue;
         if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) {
             securityModeValue = 1;
         } else {
@@ -243,7 +231,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 throw new InitializationException("No endpoint with the specified security policy was found.");
             }
 
-            OpcUaClientConfig cfg = null;
+            OpcUaClientConfig cfg;
             if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) { // If no security policy is used
 
                 cfg = new OpcUaClientConfigBuilder()
@@ -252,31 +240,38 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             } else {  // If security policy is used
 
+                // clientKsLocation has already been validated, no need to check again
+                String clientKsLocation = context.getProperty(CLIENT_KS_LOCATION).evaluateAttributeExpressions().getValue();
+                char[] clientKsPassword = context.getProperty(CLIENT_KS_PASSWORD).evaluateAttributeExpressions().getValue() != null ?
+                        context.getProperty(CLIENT_KS_PASSWORD).evaluateAttributeExpressions().getValue().toCharArray() : null;
+
                 // Verify server certificate against the trust store
-                if (requireServerAuth) {
-                    if (trustStoreLocation == null) {
-                        getLogger().error("Server authentication is required but no trust store is provided");
-                        throw new InitializationException("No trust store specified");
-                    }
+                if (context.getProperty(REQUIRE_SERVER_AUTH).asBoolean()) {
+
+                    // trustStoreLocation has already been validated, no need to check again
+                    String trustStoreLocation = context.getProperty(TRUSTSTORE_LOCATION).evaluateAttributeExpressions().getValue();
+                    char[] trustStorePassword = context.getProperty(TRUSTSTORE_PASSWORD).evaluateAttributeExpressions().getValue()!= null ?
+                            context.getProperty(TRUSTSTORE_PASSWORD).evaluateAttributeExpressions().getValue().toCharArray() : null;
+
                     TrustStoreLoader tsLoader = new TrustStoreLoader().load(trustStoreLocation, trustStorePassword);
                     CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+                    if (endpointDescription.getServerCertificate() == null) {
+                        throw new InitializationException("No server certificate found.");
+                    }
                     Certificate serverCert = certFactory.generateCertificate(
                             new ByteArrayInputStream(endpointDescription.getServerCertificate().bytes()));
                     if (!tsLoader.verify(serverCert)) {
                         getLogger().error("Cannot verify server certificate. Please make sure you have added the server certificate to the trust store.");
-                        throw new InitializationException("Server certificate verification error");
+                        throw new InitializationException("Server certificate verification error.");
                     }
                 }
 
-                // Generate self-signed certificate according to application name, or retrieve already generated one
-                if (clientKsLocation == null) {
-                    getLogger().error("Security policy is specified but no keystore is specified.");
-                    throw new InitializationException("No client keystore specified");
-                }
                 KeyStoreLoader loader = new KeyStoreLoader().load(clientKsLocation, clientKsPassword);
 
+                String authType = context.getProperty(AUTH_POLICY).getValue();
                 IdentityProvider identityProvider = authType.equals("Anon") ? new AnonymousProvider()
-                        : new UsernameProvider(userName, password);
+                        : new UsernameProvider(context.getProperty(USERNAME).evaluateAttributeExpressions().getValue(),
+                            context.getProperty(PASSWORD).evaluateAttributeExpressions().getValue());
 
                 cfg = OpcUaClientConfig.builder()
                         .setCertificate(loader.getClientCertificate())
@@ -305,7 +300,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 getLogger().debug("Disconnecting from OPC server...");
                 opcClient.disconnect().get();
             }
-        } catch (InterruptedException | ExecutionException e) {
+        } catch (Exception e) {
             getLogger().warn(e.getMessage());
         }
     }

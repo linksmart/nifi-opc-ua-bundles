@@ -66,6 +66,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
             .required(true)
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
             .sensitive(false)
+            .expressionLanguageSupported(true)
             .build();
 
     public static final PropertyDescriptor AGGREGATE_RECORD = new PropertyDescriptor
@@ -138,7 +139,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
 
 
         try {
-            tagNames = parseFile(Paths.get(context.getProperty(TAG_FILE_LOCATION).toString()));
+            tagNames = parseFile(Paths.get(context.getProperty(TAG_FILE_LOCATION).evaluateAttributeExpressions().toString()));
         } catch (IOException e) {
             getLogger().error("Error reading tag list from local file.");
             return;
