@@ -41,27 +41,27 @@ Property Name | Description
 ------|-----
 Security Policy | Different algorithms for signing and encrypting messages. If this option is set to `None`, the following options will not be in effect.
 Security Mode | What measure is taken to secure data. `Signed`: data are signed to protect integrity; `SignedAndEncrypt`: Signed and encrypt data to protect privacy.
-Client Keystore Location | The location of the keystore file (JKS type). Notice that the keystore should have one keypair entry (private key + certificate). If multiple exist, then the first one will be used. Also notice that the the key password should be the same as the keystore password.
+Client Keystore Location | The location of the keystore file (`JKS` type). Notice that the keystore should have one `PrivateKeyEntry` (private key + certificate). If multiple exist, then the first one will be used. Also notice that the the key password should be the same as the keystore password.
 Client Keystore Password | The password of the keystore (the key password should also be the same)
 Require Server Authentication | Whether to verify server certificate against the trust store. It is recommended to disable this option for easier testing, but enable it for production usage.
-Trust Store Location | The location of the keystore file (JKS type). Multiple certificates inside the trust store is possible.
+Trust Store Location | The location of the keystore file (`JKS` type). Multiple certificates inside the trust store is possible.
 Trust Store Password | The password of the keystore.
 Auth Policy | Choose between "Anonymous" or using username-password for authentication.
 Username | Only valid when `Auth Policy` is set to `Username`. The username for authentication.
 Password | Only valid when `Auth Policy` is set to `Username`. The password for authentication.
 
 #### Instructions on testing security connection
-- Generate a client keystore containing a self-signed certificate:
+- Generate a client keystore containing a self-signed certificate (notice that you should use the same password for both storepass and keypass):
 
 ```bash
-keytool -genkey -keyalg RSA -alias nifi-client -keystore client.jks -storepass password -validity 360 -keysize 2048
+keytool -genkey -keyalg RSA -alias nifi-client -keystore client.jks -storepass SuperSecret -keypass SuperSecret -validity 360 -keysize 2048
 ```
 
 - Download the server certificate from the OPC UA server (let's name it server.der);  
 
 - Import the certificate into a JKS trust store:
 ```bash
-keystore -importcert -file server.der -alias opc-ua-server -keystore trust.jks -storepass password
+keytool -importcert -file server.der -alias opc-ua-server -keystore trust.jks -storepass SuperSecret
 ```
 
 - Reference this two keystores from the OPCUAService property fields.
