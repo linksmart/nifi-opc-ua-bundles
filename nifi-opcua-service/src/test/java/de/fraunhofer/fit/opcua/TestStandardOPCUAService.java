@@ -86,13 +86,43 @@ public class TestStandardOPCUAService {
         runner.setProperty(service, StandardOPCUAService.SECURITY_MODE, "SignAndEncrypt");
         runner.setProperty(service, StandardOPCUAService.CLIENT_KS_LOCATION, "src/test/resources/client.jks");
         runner.setProperty(service, StandardOPCUAService.CLIENT_KS_PASSWORD, "password");
-        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_LOCATION, "src/test/resources/server.jks");
-        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.REQUIRE_SERVER_AUTH, "true");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_LOCATION, "src/test/resources/trust.jks");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "SuperSecret");
         runner.setProperty(service, StandardOPCUAService.AUTH_POLICY, "Anon");
 
         runner.assertValid(service);
 
         runner.enableControllerService(service);
+
+        List<String> tagList = Arrays.asList("ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG1_EXT",
+                "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG2_EXT");
+
+        byte[] bytes = service.getValue(tagList, "Both", true, "");
+        System.out.println(new String(bytes));
+
+        runner.disableControllerService(service);
+    }
+
+    @Test(expected = InitializationException.class)
+    public void testSecurityAccessWrongTrustStore() throws InitializationException {
+        runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
+        runner.setProperty(service, StandardOPCUAService.SECURITY_POLICY, "Basic128Rsa15");
+        runner.setProperty(service, StandardOPCUAService.SECURITY_MODE, "SignAndEncrypt");
+        runner.setProperty(service, StandardOPCUAService.CLIENT_KS_LOCATION, "src/test/resources/client.jks");
+        runner.setProperty(service, StandardOPCUAService.CLIENT_KS_PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.REQUIRE_SERVER_AUTH, "true");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_LOCATION, "src/test/resources/trust-wrong.jks");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.AUTH_POLICY, "Anon");
+
+        runner.assertValid(service);
+
+        try {
+            runner.enableControllerService(service);
+        } catch (AssertionError e) {
+            throw new InitializationException("");
+        }
 
         List<String> tagList = Arrays.asList("ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG1_EXT",
                 "ns=4;s=S71500/ET200MP-Station_2.PLC_1.GlobalVars.I_MAG2_EXT");
@@ -110,8 +140,9 @@ public class TestStandardOPCUAService {
         runner.setProperty(service, StandardOPCUAService.SECURITY_MODE, "SignAndEncrypt");
         runner.setProperty(service, StandardOPCUAService.CLIENT_KS_LOCATION, "src/test/resources/client.jks");
         runner.setProperty(service, StandardOPCUAService.CLIENT_KS_PASSWORD, "password");
-        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_LOCATION, "src/test/resources/server.jks");
-        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.REQUIRE_SERVER_AUTH, "true");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_LOCATION, "src/test/resources/trust.jks");
+        runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "SuperSecret");
         runner.setProperty(service, StandardOPCUAService.AUTH_POLICY, "Username");
         runner.setProperty(service, StandardOPCUAService.USERNAME, "test1");
         runner.setProperty(service, StandardOPCUAService.PASSWORD, "password");

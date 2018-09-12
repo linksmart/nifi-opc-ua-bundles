@@ -38,16 +38,18 @@ import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription;
 import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
-import org.eclipse.milo.opcua.stack.core.types.builtin.*;
+import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
+import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
+import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
+import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.DataChangeTrigger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn;
 import org.eclipse.milo.opcua.stack.core.types.structured.*;
+import org.eclipse.milo.opcua.stack.core.util.CertificateUtil;
 
-import java.io.ByteArrayInputStream;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
@@ -254,15 +256,16 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                             context.getProperty(TRUSTSTORE_PASSWORD).evaluateAttributeExpressions().getValue().toCharArray() : null;
 
                     TrustStoreLoader tsLoader = new TrustStoreLoader().load(trustStoreLocation, trustStorePassword);
-                    CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-                    if (endpointDescription.getServerCertificate() == null) {
-                        throw new InitializationException("No server certificate found.");
-                    }
-                    Certificate serverCert = certFactory.generateCertificate(
-                            new ByteArrayInputStream(endpointDescription.getServerCertificate().bytes()));
-                    if (!tsLoader.verify(serverCert)) {
-                        getLogger().error("Cannot verify server certificate. Please make sure you have added the server certificate to the trust store.");
-                        throw new InitializationException("Server certificate verification error.");
+                    List<X509Certificate> serverCerts = CertificateUtil.decodeCertificates(
+                            endpointDescription.getServerCertificate().bytes());
+
+                    try {
+                        // Only verify the first certificate, and CA certificate at the end of the chain. Intermediate certificates are not verified
+                        tsLoader.verify(serverCerts);
+                    } catch (Exception e) {
+                        getLogger().error("Cannot verify server certificate. Cause: " + e.getMessage()
+                                + " Please make sure you have added the server certificate to the trust store.");
+                        throw new InitializationException(e.getMessage());
                     }
                 }
 
