@@ -64,12 +64,12 @@ keytool -genkey -keyalg RSA -alias nifi-client -keystore client.jks -storepass S
 keytool -importcert -file server.der -alias opc-ua-server -keystore trust.jks -storepass SuperSecret
 ```
 
-- Reference this two keystores from the OPCUAService property fields.
+- Reference these two keystores from the OPCUAService property fields.
 
 #### Side Notes
-The security features have been tested against the in-house IBH Link UA server (currently, I haven't found the way to limit anonymous user accessing data on this server).  
+- The security features have been tested against the in-house IBH Link UA server (However, currently I haven't found the way to limit anonymous user accessing data on this server, so the username-based access cannot be fully tested).  
   
-Notice: when the client tries to connect to the OPC server for the first time and the client certificate is not yet trusted by the server yet, 
+- Notice: when the client tries to connect to the OPC server for the first time and the client certificate is not yet trusted by the server yet, 
 the connection would not succeed. At this time, you should go to the web interface of the OPC server and manually trust the certificate. Restart the service and the connection should then succeed.  
   
   

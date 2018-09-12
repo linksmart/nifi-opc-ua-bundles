@@ -279,6 +279,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                         .setEndpoint(endpointDescription)
                         .setIdentityProvider(identityProvider)
                         .setRequestTimeout(uint(5000))
+
                         .build();
             }
 
