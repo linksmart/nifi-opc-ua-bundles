@@ -1,0 +1,17 @@
+Nifi OPC-UA Bundle
+Copyright 2014-2018 Fraunhofer Institute for Applied Information Technology FIT
+
+This product includes software developed at
+Fraunhofer Institute for Applied Information Technology FIT (http://fit.fraunhofer.de/).
+
+Nifi OPC-UA Bundle is an independent fork of the nifi-opcua-bundle (https://github.com/hashmapinc/nifi-opcua-bundle)
+developed by HashmapInc. under Apache License v2.0.
+
+Nifi OPC-UA Bundle includes the following dependencies developed by
+the corresponding developers and organisations:
+
+* https://github.com/apache/nifi by Apache Software Foundation (Apache License v2.0)
+* https://github.com/eclipse/milo by Eclipse Foundation (Eclipse Public License v1.0)
+* https://github.com/junit-team/junit4 by JUnit-Team (Eclipse Public License v1.0)
+* https://www.bouncycastle.org by Legion of Bouncy Castle Inc. (Custom License)
+* https://github.com/qos-ch/slf4j by Ceki Gulcu (MIT License)
