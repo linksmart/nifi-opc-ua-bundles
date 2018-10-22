@@ -53,6 +53,7 @@ import java.security.cert.X509Certificate;
 import java.util.*;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
@@ -302,7 +303,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         try {
             if (opcClient != null) {
                 getLogger().debug("Disconnecting from OPC server...");
-                opcClient.disconnect().get();
+                opcClient.disconnect().get(3, TimeUnit.SECONDS);
             }
         } catch (Exception e) {
             getLogger().warn(e.getMessage());
