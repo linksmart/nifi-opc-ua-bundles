@@ -38,7 +38,7 @@ public class TestStandardOPCUAService {
         runner.addControllerService("test-good", service);
     }
 
-    @Test
+/*    @Test
     public void testServiceInitialization() {
 
         runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
@@ -131,7 +131,7 @@ public class TestStandardOPCUAService {
         System.out.println(new String(bytes));
 
         runner.disableControllerService(service);
-    }
+    }*/
 
     @Test
     public void testUsernameSecurityAccess() {
@@ -145,7 +145,7 @@ public class TestStandardOPCUAService {
         runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "SuperSecret");
         runner.setProperty(service, StandardOPCUAService.AUTH_POLICY, "Username");
         runner.setProperty(service, StandardOPCUAService.USERNAME, "test1");
-        runner.setProperty(service, StandardOPCUAService.PASSWORD, "password");
+        //runner.setProperty(service, StandardOPCUAService.PASSWORD, "password");
 
         runner.assertValid(service);
 

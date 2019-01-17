@@ -48,10 +48,10 @@ public class ListOPCNodesTest {
     public void testListingNodes() {
         testRunner.setProperty(ListOPCNodes.OPCUA_SERVICE, "controller");
         testRunner.setProperty(ListOPCNodes.MAX_REFERENCE_PER_NODE, "10");
-        testRunner.setProperty(ListOPCNodes.PRINT_INDENTATION, "");
-        testRunner.setProperty(ListOPCNodes.STARTING_NODE, "ns=4;s=S71500/ET200MP-Station_2.PLC_1");
+        testRunner.setProperty(ListOPCNodes.PRINT_INDENTATION, "-");
+        //testRunner.setProperty(ListOPCNodes.STARTING_NODE, "ns=4;s=S71500/ET200MP-Station_2.PLC_1");
         testRunner.setProperty(ListOPCNodes.RECURSIVE_DEPTH, "4");
-        testRunner.setProperty(ListOPCNodes.PRINT_NON_LEAF_NODES, "false");
+        testRunner.setProperty(ListOPCNodes.PRINT_NON_LEAF_NODES, "true");
 
         testRunner.run();
 

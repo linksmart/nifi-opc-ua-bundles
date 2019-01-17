@@ -21,13 +21,14 @@ import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnDisabled;
 import org.apache.nifi.annotation.lifecycle.OnEnabled;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.components.Validator;
 import org.apache.nifi.controller.AbstractControllerService;
 import org.apache.nifi.controller.ConfigurationContext;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.processor.exception.ProcessException;
 import org.apache.nifi.processor.util.StandardValidators;
 import org.apache.nifi.reporting.InitializationException;
 import org.eclipse.milo.opcua.sdk.client.OpcUaClient;
-import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfig;
 import org.eclipse.milo.opcua.sdk.client.api.config.OpcUaClientConfigBuilder;
 import org.eclipse.milo.opcua.sdk.client.api.identity.AnonymousProvider;
 import org.eclipse.milo.opcua.sdk.client.api.identity.IdentityProvider;
@@ -68,7 +69,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .description("the opc.tcp address of the opc ua server")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     public static final PropertyDescriptor SECURITY_POLICY = new PropertyDescriptor
@@ -96,14 +97,14 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                     "If multiple entries exist, the first one is used. " +
                     "Besides, the key should have the same password as the keystore.")
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
-            .expressionLanguageSupported(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     public static final PropertyDescriptor CLIENT_KS_PASSWORD = new PropertyDescriptor
             .Builder().name("Client Keystore Password")
             .description("The password for the client keystore")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     public static final PropertyDescriptor REQUIRE_SERVER_AUTH = new PropertyDescriptor
@@ -120,14 +121,14 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                     "Trust store contains trusted certificates, which are to be used for server identity verification." +
                     "The trust store can contain multiple certificates.")
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
-            .expressionLanguageSupported(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     public static final PropertyDescriptor TRUSTSTORE_PASSWORD = new PropertyDescriptor
             .Builder().name("Trust store Password")
             .description("The password for the trust store")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     public static final PropertyDescriptor AUTH_POLICY = new PropertyDescriptor
@@ -144,7 +145,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .description("The user name to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
             .required(false)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     public static final PropertyDescriptor PASSWORD = new PropertyDescriptor
@@ -152,8 +153,18 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .description("The password to access the OPC UA server (only valid when \"Authentication Policy\" is \"Username\")")
             .required(false)
             .sensitive(true)
-            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(true)
+            .addValidator(Validator.VALID)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
+            .build();
+
+    public static final PropertyDescriptor USE_PROXY = new PropertyDescriptor
+            .Builder().name("Use Proxy")
+            .description("If true, the \"Endpoint URL\" specified above will be used to establish connection to the server instead of the discovered URL. " +
+                    "Useful when connecting to OPC UA server through IP layer proxy or through SSH tunnel, in which the discovered URL is not reachable by the client.")
+            .required(true)
+            .defaultValue("false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     private static final List<PropertyDescriptor> properties;
@@ -180,6 +191,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         props.add(AUTH_POLICY);
         props.add(USERNAME);
         props.add(PASSWORD);
+        props.add(USE_PROXY);
         properties = Collections.unmodifiableList(props);
     }
 
@@ -205,13 +217,12 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         int securityModeValue;
         if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) {
             securityModeValue = 1;
+        } else if (context.getProperty(SECURITY_MODE).getValue().equals("Sign")) {
+            securityModeValue = 2;
         } else {
-            if (context.getProperty(SECURITY_MODE).getValue().equals("Sign")) {
-                securityModeValue = 2;
-            } else {
-                securityModeValue = 3;
-            }
+            securityModeValue = 3;
         }
+
 
         try {
             EndpointDescription[] endpoints =
@@ -230,18 +241,27 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             }
 
             if (endpointDescription == null) {
-                getLogger().error("No endpoint with the specified security policy was found.");
                 throw new InitializationException("No endpoint with the specified security policy was found.");
             }
 
-            OpcUaClientConfig cfg;
-            if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) { // If no security policy is used
+            OpcUaClientConfigBuilder cfgBuilder = new OpcUaClientConfigBuilder();
 
-                cfg = new OpcUaClientConfigBuilder()
-                        .setEndpoint(endpointDescription)
-                        .build();
+            // The following code is used to force the client to connect to the URL given by user,
+            // instead of using the discovered URL. Useful when client is visiting the server through
+            // some proxy or SSH tunneling, and the discovered URL is not reachable.
+            if (context.getProperty(USE_PROXY).asBoolean()) {
+                endpointDescription =  new EndpointDescription(endpoint,
+                        endpointDescription.getServer(),
+                        endpointDescription.getServerCertificate(),
+                        endpointDescription.getSecurityMode(),
+                        endpointDescription.getSecurityPolicyUri(),
+                        endpointDescription.getUserIdentityTokens(),
+                        endpointDescription.getTransportProfileUri(),
+                        endpointDescription.getSecurityLevel());
+            }
 
-            } else {  // If security policy is used
+                cfgBuilder.setEndpoint(endpointDescription);
+            if (!context.getProperty(SECURITY_POLICY).getValue().equals("None")) {  // If security policy is used
 
                 // clientKsLocation has already been validated, no need to check again
                 String clientKsLocation = context.getProperty(CLIENT_KS_LOCATION).evaluateAttributeExpressions().getValue();
@@ -253,7 +273,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
                     // trustStoreLocation has already been validated, no need to check again
                     String trustStoreLocation = context.getProperty(TRUSTSTORE_LOCATION).evaluateAttributeExpressions().getValue();
-                    char[] trustStorePassword = context.getProperty(TRUSTSTORE_PASSWORD).evaluateAttributeExpressions().getValue()!= null ?
+                    char[] trustStorePassword = context.getProperty(TRUSTSTORE_PASSWORD).evaluateAttributeExpressions().getValue() != null ?
                             context.getProperty(TRUSTSTORE_PASSWORD).evaluateAttributeExpressions().getValue().toCharArray() : null;
 
                     TrustStoreLoader tsLoader = new TrustStoreLoader().load(trustStoreLocation, trustStorePassword);
@@ -272,24 +292,27 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
                 KeyStoreLoader loader = new KeyStoreLoader().load(clientKsLocation, clientKsPassword);
 
-                String authType = context.getProperty(AUTH_POLICY).getValue();
-                IdentityProvider identityProvider = authType.equals("Anon") ? new AnonymousProvider()
-                        : new UsernameProvider(context.getProperty(USERNAME).evaluateAttributeExpressions().getValue(),
-                            context.getProperty(PASSWORD).evaluateAttributeExpressions().getValue());
-
-                cfg = OpcUaClientConfig.builder()
-                        .setCertificate(loader.getClientCertificate())
+                cfgBuilder.setCertificate(loader.getClientCertificate())
                         .setKeyPair(loader.getClientKeyPair())
-                        .setEndpoint(endpointDescription)
-                        .setIdentityProvider(identityProvider)
-                        .setRequestTimeout(uint(5000))
-
-                        .build();
+                        .setRequestTimeout(uint(5000));
             }
 
-            opcClient = new OpcUaClient(cfg);
-            opcClient.connect().get();
+            String authType = context.getProperty(AUTH_POLICY).getValue();
+            IdentityProvider identityProvider;
+            if (authType.equals("Anon")) {
+                identityProvider = new AnonymousProvider();
+            } else {
+                String username = context.getProperty(USERNAME).evaluateAttributeExpressions().getValue();
+                username = username == null ? "" : username;
+                String password = context.getProperty(PASSWORD).evaluateAttributeExpressions().getValue();
+                identityProvider = new UsernameProvider(username == null ? "" : username,
+                        password == null ? "" : password);
+            }
 
+            cfgBuilder.setIdentityProvider(identityProvider);
+
+            opcClient = new OpcUaClient(cfgBuilder.build());
+            opcClient.connect().get(5, TimeUnit.SECONDS);
 
         } catch (Exception e) {
             throw new InitializationException(e);
@@ -360,35 +383,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
 
     @Override
-    public byte[] getNodes(String indentString, int maxRecursiveDepth, int maxReferencePerNode,
-                           boolean printNonLeafNode, String rootNodeId)
-            throws ProcessException {
-
-        try {
-            if (opcClient == null) {
-                throw new Exception("OPC Client is null. OPC UA service was not enabled properly.");
-            }
-
-            NodeId nodeId;
-            if (rootNodeId == null || rootNodeId.isEmpty()) {
-                nodeId = Identifiers.RootFolder;
-            } else {
-                nodeId = NodeId.parse(rootNodeId);
-            }
-
-            StringBuilder builder = new StringBuilder();
-            browseNodeIteratively("", indentString, maxRecursiveDepth, maxReferencePerNode, printNonLeafNode,
-                    opcClient, nodeId, builder);
-
-            return builder.toString().getBytes();
-
-        } catch (Exception e) {
-            throw new ProcessException(e.getMessage());
-        }
-
-    }
-
-    @Override
     public String subscribe(List<String> tagNames, BlockingQueue<String> queue, boolean tsChangedNotify) throws ProcessException {
 
         if (subscriberMap == null) {
@@ -417,7 +411,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 // If we apply this filter in MonitoringParameters, now not only we will get data when value changes,
                 // we will also get data even value doesn't change, but the timestamp has changed.
                 // If it is null, then the default DataChangeFilter will be used, which only get data when its value changes.
-                DataChangeFilter df = tsChangedNotify?
+                DataChangeFilter df = tsChangedNotify ?
                         new DataChangeFilter(DataChangeTrigger.from(2), null, null) : null;
 
                 MonitoringParameters parameters = new MonitoringParameters(
@@ -441,7 +435,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                         String valueLine = writeCsv(getFullName(it.getReadValueId().getNodeId()),
                                 "Both", value);
 
-                        if(valueLine != null) {
+                        if (valueLine != null) {
                             queue.offer(valueLine);
                         }
 
@@ -494,6 +488,35 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     }
 
+    @Override
+    public byte[] getNodes(String indentString, int maxRecursiveDepth, int maxReferencePerNode,
+                           boolean printNonLeafNode, String rootNodeId)
+            throws ProcessException {
+
+        try {
+            if (opcClient == null) {
+                throw new Exception("OPC Client is null. OPC UA service was not enabled properly.");
+            }
+
+            NodeId nodeId;
+            if (rootNodeId == null || rootNodeId.isEmpty()) {
+                nodeId = Identifiers.RootFolder;
+            } else {
+                nodeId = NodeId.parse(rootNodeId);
+            }
+
+            StringBuilder builder = new StringBuilder();
+            browseNodeIteratively("", indentString, maxRecursiveDepth, maxReferencePerNode, printNonLeafNode,
+                    opcClient, nodeId, builder);
+
+            return builder.toString().getBytes();
+
+        } catch (Exception e) {
+            throw new ProcessException(e.getMessage());
+        }
+
+    }
+
     // remainDepth = 0 means only print out the current node
     // StringBuilder is passed into the recursive method to reduce generating strings and improve performance
     private void browseNodeIteratively(String currentIndent, String indentString, int remainDepth, int maxRefPerNode,
@@ -530,7 +553,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             }
 
         } catch (InterruptedException | ExecutionException e) {
-            //getLogger().error("Browsing nodeId=" + browseRoot + " failed: " + e.getMessage());
+            getLogger().error("Browsing nodeId=" + browseRoot + " failed: " + e.getMessage());
         }
 
     }

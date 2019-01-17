@@ -22,6 +22,7 @@ import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.Validator;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
@@ -82,7 +83,7 @@ public class GetOPCData extends AbstractProcessor {
             .required(true)
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
             .sensitive(false)
-            .expressionLanguageSupported(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     public static final PropertyDescriptor EXCLUDE_NULL_VALUE = new PropertyDescriptor
@@ -210,6 +211,8 @@ public class GetOPCData extends AbstractProcessor {
                     getLogger().error("Failed to read flowfile " + e.getMessage());
                 }
             });
+
+            session.remove(flowFile);
         } else {
 
             if(tagList == null)
