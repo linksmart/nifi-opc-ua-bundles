@@ -173,8 +173,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
 
     private OpcUaClient opcClient;
-    private UaSubscription uaSubscription;
-    private Map<String, List<UaMonitoredItem>> subscriberMap;
+    private Map<String, UInteger> subscriptionMap;
 
     private final AtomicLong clientHandles = new AtomicLong(1L);
 
@@ -383,8 +382,8 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     @Override
     public String subscribe(List<String> tagNames, BlockingQueue<String> queue, boolean tsChangedNotify) throws ProcessException {
 
-        if (subscriberMap == null) {
-            subscriberMap = new HashMap<>();
+        if (subscriptionMap == null) {
+            subscriptionMap = new HashMap<>();
         }
 
         try {
@@ -392,7 +391,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 throw new Exception("OPC Client is null. OPC UA service was not enabled properly.");
             }
 
-            uaSubscription = opcClient.getSubscriptionManager().createSubscription(1000.0).get();
+            UaSubscription uaSubscription = opcClient.getSubscriptionManager().createSubscription(1000.0).get();
 
             // Create a list of MonitoredItemCreateRequest
             ArrayList<MonitoredItemCreateRequest> micrList = new ArrayList<>();
@@ -433,10 +432,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                         String valueLine = writeCsv(getFullName(it.getReadValueId().getNodeId()),
                                 "Both", value);
 
-                        if (valueLine != null) {
-                            queue.offer(valueLine);
-                        }
-
+                        queue.offer(valueLine);
                     });
 
             List<UaMonitoredItem> items = uaSubscription.createMonitoredItems(
@@ -454,14 +450,14 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 }
             }
 
-            String subscriberUid;
+            String subscriptionUid;
             do {
-                subscriberUid = generateRandomChars(10);
-            } while (subscriberMap.containsKey(subscriberUid));
+                subscriptionUid = generateRandomChars(10);
+            } while (subscriptionMap.containsKey(subscriptionUid));
 
-            subscriberMap.put(subscriberUid, items);
+            subscriptionMap.put(subscriptionUid, uaSubscription.getSubscriptionId());
 
-            return subscriberUid;
+            return subscriptionUid;
 
         } catch (Exception e) {
             throw new ProcessException(e.getMessage());
@@ -469,18 +465,21 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     }
 
     @Override
-    public void unsubscribe(String subscriberUid) throws ProcessException {
+    public void unsubscribe(String subscriptionUid) throws ProcessException {
 
         if (opcClient == null) {
             throw new ProcessException("OPC Client is null. OPC UA service was not enabled properly.");
         }
 
-        List<UaMonitoredItem> listToDelete;
-        if ((listToDelete = subscriberMap.get(subscriberUid)) != null) {
+        if (subscriptionMap.get(subscriptionUid) != null) {
+
             try {
-                uaSubscription.deleteMonitoredItems(listToDelete).get();
-            } catch (InterruptedException | ExecutionException e) {
-                e.printStackTrace();
+
+                opcClient.getSubscriptionManager()
+                        .deleteSubscription(subscriptionMap.get(subscriptionUid)).get(4, TimeUnit.SECONDS);
+                subscriptionMap.remove(subscriptionUid);
+            } catch (Exception e) {
+                throw new ProcessException(e);
             }
         }
 
