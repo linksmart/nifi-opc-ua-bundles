@@ -366,8 +366,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                     getLogger().error("Error parsing result for " + tagNames.get(i));
                     valueLine = "";
                 }
-                if (valueLine.isEmpty())
-                    continue;
 
                 serverResponse.append(valueLine);
 
@@ -598,15 +596,31 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         valueLine.append(tagName).append(",");
 
         if (("ServerTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine.append(value.getServerTime().getJavaTime()).append(",");
+            if(value.getServerTime() != null) valueLine.append(value.getServerTime().getJavaTime());
+            valueLine.append(",");
         }
         if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            valueLine.append(value.getSourceTime().getJavaTime()).append(",");
+            if(value.getSourceTime() != null) valueLine.append(value.getSourceTime().getJavaTime());
+            valueLine.append(",");
         }
 
-        valueLine.append(value.getValue().getValue().toString()).
-                append(",").
-                append(value.getStatusCode().getValue()).
+        if(!(value == null || value.getValue() == null || value.getValue().getValue() == null)) {
+            // Check the type of variant
+            if(value.getValue().getValue().getClass().isArray()) {
+
+                Object[] arr = (Object[]) value.getValue().getValue();
+                for (Object o : arr) {
+                    valueLine.append(o.toString()).append(";");
+                }
+
+            } else {
+                valueLine.append(value.getValue().getValue().toString());
+            }
+
+        }
+        valueLine.append(",");
+
+        valueLine.append(value.getStatusCode().getValue()).
                 append(System.getProperty("line.separator"));
 
         return valueLine.toString();
