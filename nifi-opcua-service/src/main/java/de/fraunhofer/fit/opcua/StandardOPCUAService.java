@@ -36,13 +36,11 @@ import org.eclipse.milo.opcua.sdk.client.api.identity.UsernameProvider;
 import org.eclipse.milo.opcua.sdk.client.api.nodes.Node;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaMonitoredItem;
 import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscription;
+import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscriptionManager;
 import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
-import org.eclipse.milo.opcua.stack.core.types.builtin.DataValue;
-import org.eclipse.milo.opcua.stack.core.types.builtin.ExtensionObject;
-import org.eclipse.milo.opcua.stack.core.types.builtin.NodeId;
-import org.eclipse.milo.opcua.stack.core.types.builtin.QualifiedName;
+import org.eclipse.milo.opcua.stack.core.types.builtin.*;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.DataChangeTrigger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode;
@@ -313,6 +311,14 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             opcClient = new OpcUaClient(cfgBuilder.build());
             opcClient.connect().get(5, TimeUnit.SECONDS);
 
+            opcClient.getSubscriptionManager().addSubscriptionListener(new UaSubscriptionManager.SubscriptionListener() {
+                @Override
+                public void onSubscriptionTransferFailed(UaSubscription subscription, StatusCode statusCode) {
+                    // TODO: this right now is just for logging purpose, need to further investigate the behavior for subscription transfer
+                    getLogger().warn("Subscription transfer failed!");
+                }
+            });
+
         } catch (Exception e) {
             throw new InitializationException(e);
         }
@@ -359,7 +365,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                         continue;
                     }
 
-                    valueLine = writeCsv(tagNames.get(i), returnTimestamp, rvList.get(i));
+                    valueLine = writeCsv(tagNames.get(i), returnTimestamp, rvList.get(i), excludeNullValue, nullValueString);
 
                 } catch (Exception ex) {
                     getLogger().error("Error parsing result for " + tagNames.get(i));
@@ -430,7 +436,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                         getLogger().debug("subscription value received: item=" + it.getReadValueId().getNodeId()
                                 + " value=" + value.getValue());
                         String valueLine = writeCsv(getFullName(it.getReadValueId().getNodeId()),
-                                "Both", value);
+                                "Both", value, false, "");
 
                         queue.offer(valueLine);
                     });
@@ -588,7 +594,36 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         return sb.toString();
     }
 
-    private String writeCsv(String tagName, String returnTimestamp, DataValue value) {
+    private String writeCsv(String tagName, String returnTimestamp, DataValue value,
+                            boolean excludeNullValue, String nullValueString) {
+
+        String sValue = nullValueString;
+
+        if(value == null || value.getValue() == null || value.getValue().getValue() == null) {
+
+            if (excludeNullValue) {
+                getLogger().debug("Null value returned for " + tagName
+                        + " -- Skipping because property is set");
+                return "";
+            }
+
+        } else {
+
+            // Check the type of variant
+            if(value.getValue().getValue().getClass().isArray()) {
+
+                StringBuilder sb = new StringBuilder();
+                Object[] arr = (Object[]) value.getValue().getValue();
+                for (Object o : arr) {
+                    sb.append(o.toString()).append(";");
+                }
+                sValue = sb.toString();
+
+            } else {
+                sValue = value.getValue().getValue().toString();
+            }
+
+        }
 
         StringBuilder valueLine = new StringBuilder();
 
@@ -603,20 +638,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             valueLine.append(",");
         }
 
-        if(!(value == null || value.getValue() == null || value.getValue().getValue() == null)) {
-            // Check the type of variant
-            if(value.getValue().getValue().getClass().isArray()) {
-
-                Object[] arr = (Object[]) value.getValue().getValue();
-                for (Object o : arr) {
-                    valueLine.append(o.toString()).append(";");
-                }
-
-            } else {
-                valueLine.append(value.getValue().getValue().toString());
-            }
-
-        }
+        valueLine.append(sValue);
         valueLine.append(",");
 
         valueLine.append(value.getStatusCode().getValue()).
