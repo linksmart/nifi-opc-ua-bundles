@@ -358,7 +358,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                            String nullValueString) throws ProcessException {
         try {
             if (opcClient == null) {
-                throw new Exception("OPC Client is null. OPC UA service was not enabled properly.");
+                throw new ProcessException("OPC Client is null. OPC UA service was not enabled properly.");
             }
 
             // TODO: Throw more descriptive exception when parsing fails
@@ -372,22 +372,8 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             for (int i = 0; i < tagNames.size(); i++) {
                 String valueLine;
-                try {
-                    if (excludeNullValue && rvList.get(i).getValue().getValue().toString().equals(nullValueString)) {
-                        getLogger().debug("Null value returned for " + rvList.get(i).getValue().getValue().toString()
-                                + " -- Skipping because property is set");
-                        continue;
-                    }
-
-                    valueLine = writeCsv(tagNames.get(i), returnTimestamp, rvList.get(i), excludeNullValue, nullValueString);
-
-                } catch (Exception ex) {
-                    getLogger().error("Error parsing result for " + tagNames.get(i));
-                    valueLine = "";
-                }
-
+                valueLine = writeCsv(tagNames.get(i), returnTimestamp, rvList.get(i), excludeNullValue, nullValueString);
                 serverResponse.append(valueLine);
-
             }
 
             return serverResponse.toString().trim().getBytes();
@@ -438,7 +424,8 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     public void unsubscribe(String subscriptionUid) {
 
         if (opcClient == null) {
-            throw new ProcessException("OPC Client is null. OPC UA service was not enabled properly.");
+            getLogger().warn("OPC Client is null. OPC UA service was not enabled properly.");
+            return;
         }
 
         if (subscriptionMap.get(subscriptionUid) != null) {
@@ -461,7 +448,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
         try {
             if (opcClient == null) {
-                throw new Exception("OPC Client is null. OPC UA service was not enabled properly.");
+                throw new ProcessException("OPC Client is null. OPC UA service was not enabled properly.");
             }
 
             NodeId nodeId;
@@ -671,16 +658,16 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         private UaSubscription subscription;
         private BlockingQueue<String> queue;
 
-        public SubscriptionConfig(UaSubscription subscription, BlockingQueue<String> queue) {
+        SubscriptionConfig(UaSubscription subscription, BlockingQueue<String> queue) {
             this.subscription = subscription;
             this.queue = queue;
         }
 
-        public UaSubscription getSubscription() {
+        UaSubscription getSubscription() {
             return subscription;
         }
 
-        public BlockingQueue<String> getQueue() {
+        BlockingQueue<String> getQueue() {
             return queue;
         }
     }

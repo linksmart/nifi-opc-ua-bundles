@@ -88,7 +88,7 @@ public class SubscribeOPCNodesTest {
                     populateQueue((BlockingQueue<String>) args[1], queueString);
                     return "12345678"; // random subscriber uid, doesn't matter in test
                 }
-        ).when(service).subscribe(any(), any(), anyBoolean());
+        ).when(service).subscribe(any(), any(), anyBoolean(), anyLong());
 
 
         testRunner.setProperty(SubscribeOPCNodes.OPCUA_SERVICE, "controller");
