@@ -23,6 +23,7 @@ import org.apache.nifi.annotation.documentation.Tags;
 import org.apache.nifi.annotation.lifecycle.OnScheduled;
 import org.apache.nifi.annotation.lifecycle.OnStopped;
 import org.apache.nifi.components.PropertyDescriptor;
+import org.apache.nifi.expression.ExpressionLanguageScope;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.*;
 import org.apache.nifi.processor.exception.ProcessException;
@@ -51,6 +52,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
     private String subscriberUid;
     private boolean aggregateRecord;
     private boolean tsChangedNotify;
+    private long minPublishInterval;
     private RecordAggregator recordAggregator;
 
     public static final PropertyDescriptor OPCUA_SERVICE = new PropertyDescriptor.Builder()
@@ -66,7 +68,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
             .required(true)
             .addValidator(StandardValidators.FILE_EXISTS_VALIDATOR)
             .sensitive(false)
-            .expressionLanguageSupported(true)
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .build();
 
     public static final PropertyDescriptor AGGREGATE_RECORD = new PropertyDescriptor
@@ -87,6 +89,14 @@ public class SubscribeOPCNodes extends AbstractProcessor {
             .allowableValues("true", "false")
             .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
             .sensitive(false)
+            .build();
+
+    public static final PropertyDescriptor MIN_PUBLISH_INTERVAL = new PropertyDescriptor
+            .Builder().name("Minimum publish interval of subscription notification messages")
+            .description("The minimum publish interval of subscription notification messages. Set this property to a lower value so that rapid change of data can be detected.")
+            .required(true)
+            .defaultValue("1000")
+            .addValidator(StandardValidators.POSITIVE_INTEGER_VALIDATOR)
             .build();
 
     public static final Relationship SUCCESS = new Relationship.Builder()
@@ -110,6 +120,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
         descriptors.add(TAG_FILE_LOCATION);
         descriptors.add(AGGREGATE_RECORD);
         descriptors.add(TS_CHANGE_NOTIFY);
+        descriptors.add(MIN_PUBLISH_INTERVAL);
 
         this.descriptors = Collections.unmodifiableList(descriptors);
 
@@ -147,10 +158,11 @@ public class SubscribeOPCNodes extends AbstractProcessor {
 
         aggregateRecord = Boolean.valueOf(context.getProperty(AGGREGATE_RECORD).getValue());
         tsChangedNotify = Boolean.valueOf(context.getProperty(TS_CHANGE_NOTIFY).getValue());
+        minPublishInterval = context.getProperty(MIN_PUBLISH_INTERVAL).asLong();
+
         subscriberUid = opcUaService.subscribe(tagNames, msgQueue, tsChangedNotify);
 
-        recordAggregator = new RecordAggregator(tagNames);
-
+        recordAggregator = new RecordAggregator(tagNames, minPublishInterval);
     }
 
     @Override
@@ -204,7 +216,6 @@ public class SubscribeOPCNodes extends AbstractProcessor {
                     }
                 }
             }
-            recordAggregator.clearReadyRecord();
         }
 
     }

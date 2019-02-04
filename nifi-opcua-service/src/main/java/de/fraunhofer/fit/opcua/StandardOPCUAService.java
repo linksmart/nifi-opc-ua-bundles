@@ -40,6 +40,7 @@ import org.eclipse.milo.opcua.sdk.client.api.subscriptions.UaSubscriptionManager
 import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
+import org.eclipse.milo.opcua.stack.core.UaException;
 import org.eclipse.milo.opcua.stack.core.types.builtin.*;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.DataChangeTrigger;
@@ -308,6 +309,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             cfgBuilder.setIdentityProvider(identityProvider);
 
+
             opcClient = new OpcUaClient(cfgBuilder.build());
             opcClient.connect().get(5, TimeUnit.SECONDS);
 
@@ -316,6 +318,11 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 public void onSubscriptionTransferFailed(UaSubscription subscription, StatusCode statusCode) {
                     // TODO: this right now is just for logging purpose, need to further investigate the behavior for subscription transfer
                     getLogger().warn("Subscription transfer failed!");
+                }
+
+                @Override
+                public void onPublishFailure(UaException exception) {
+                    getLogger().warn("Subscription publish failure: " + exception.getMessage() + ", status code: " + exception.getStatusCode());
                 }
             });
 

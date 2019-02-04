@@ -30,7 +30,7 @@ public class RecordAggregatorTest {
         queue = new LinkedBlockingQueue<>();
         String tagFilePath = (new File("src\\test\\resources\\husky_tags.txt")).getAbsolutePath();
         tags = parseFile(Paths.get(tagFilePath));
-        ra = new RecordAggregator(tags);
+        ra = new RecordAggregator(tags, 100);
     }
 
     @Test
@@ -82,11 +82,7 @@ public class RecordAggregatorTest {
             ra.aggregate(msgs[i]);
         }
 
-        Thread.sleep(1500);
-
-        for(String s : ra.getReadyRecords()) {
-            System.out.println(s);
-        }
+        Thread.sleep(500);
 
         assertEquals(1, ra.getReadyRecords().size());
     }
@@ -233,7 +229,7 @@ public class RecordAggregatorTest {
             ra.aggregate(msgs[i]);
         }
 
-        Thread.sleep(1500);
+        Thread.sleep(500);
 
         assertEquals(2, ra.getReadyRecords().size());
     }

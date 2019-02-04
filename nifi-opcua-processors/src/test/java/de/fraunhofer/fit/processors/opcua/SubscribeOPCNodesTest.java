@@ -94,9 +94,10 @@ public class SubscribeOPCNodesTest {
         testRunner.setProperty(SubscribeOPCNodes.OPCUA_SERVICE, "controller");
         testRunner.setProperty(SubscribeOPCNodes.TAG_FILE_LOCATION, tagFilePath);
         testRunner.setProperty(SubscribeOPCNodes.AGGREGATE_RECORD, "true");
+        testRunner.setProperty(SubscribeOPCNodes.MIN_PUBLISH_INTERVAL, "100");
 
         testRunner.run(1, false, true);
-        Thread.sleep(1500);
+        Thread.sleep(500);
         testRunner.run(1, true, false);
 
 
@@ -106,6 +107,61 @@ public class SubscribeOPCNodesTest {
         results.get(0).assertContentEquals(expectedPayload);
 
     }
+
+
+    @Test
+    public void testReal() throws Exception {
+
+        String tagFilePath = (new File("src/test/resources/arburg_tag.txt")).getAbsolutePath();
+
+        StandardOPCUAService realService = new StandardOPCUAService();
+
+        testRunner.addControllerService("real", realService);
+        testRunner.setProperty(realService, StandardOPCUAService.ENDPOINT, "opc.tcp://localhost:9000");
+        testRunner.setProperty(realService, StandardOPCUAService.AUTH_POLICY, "Username");
+        testRunner.setProperty(realService, StandardOPCUAService.USERNAME, "host_computer");
+        testRunner.setProperty(realService, StandardOPCUAService.PASSWORD, "");
+        testRunner.setProperty(realService, StandardOPCUAService.USE_PROXY, "true");
+        testRunner.enableControllerService(realService);
+
+        testRunner.setProperty(SubscribeOPCNodes.OPCUA_SERVICE, "real");
+        testRunner.setProperty(SubscribeOPCNodes.TAG_FILE_LOCATION, tagFilePath);
+        testRunner.setProperty(SubscribeOPCNodes.AGGREGATE_RECORD, "true");
+        testRunner.setProperty(SubscribeOPCNodes.MIN_PUBLISH_INTERVAL, "1000");
+
+        testRunner.run(1, false, true);
+        Thread.sleep(1000);
+        testRunner.run(1, false, false);
+        Thread.sleep(1000);
+        testRunner.run(1, false, false);
+        Thread.sleep(1000);
+        testRunner.run(1, false, false);
+        Thread.sleep(1000);
+        testRunner.run(1, false, false);
+        Thread.sleep(1000);
+        testRunner.run(1, false, false);
+        Thread.sleep(1000);
+        testRunner.run(1, false, false);
+        Thread.sleep(1000);
+        testRunner.run(1, false, false);
+        Thread.sleep(1000);
+        testRunner.run(1, true, false);
+
+
+        List<MockFlowFile> results = testRunner.getFlowFilesForRelationship(GetOPCData.SUCCESS);
+        for(MockFlowFile f : results) {
+            System.out.println(new String(testRunner.getContentAsByteArray(f)));
+        }
+
+        assertEquals(1, results.size());
+        String expectedPayload = "1528285608582,,,,,2419756,,,150.13992,42.543697,,38.71,,10.848699,32.43998,33.245487,,,,,,4.540133,0.948,,,,50.000004,,,,,,11.0207815,,,-0.07940674,0.20775,,,350.05255,,,,,,,,,,,," + System.lineSeparator();
+        results.get(0).assertContentEquals(expectedPayload);
+
+        testRunner.disableControllerService(realService);
+
+    }
+
+
 
     @After
     public void shutdown() {

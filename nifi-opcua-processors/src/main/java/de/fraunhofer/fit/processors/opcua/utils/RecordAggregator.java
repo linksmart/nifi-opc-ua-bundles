@@ -5,7 +5,7 @@ import java.util.*;
 public class RecordAggregator {
 
     // This variable indicates how long a record waits for notification messages from OPC server
-    private final long PUBLISH_THRESHOLD_TIME = 1000;
+    private final int PUBLISH_INTERVAL_MULTIPLIER = 4;
 
     // Index of elements in the queue message
     private final int VARIABLE_ID_INDEX = 0;
@@ -13,17 +13,19 @@ public class RecordAggregator {
     private final int VALUE_INDEX = 3;
     private final int STATUS_CODE_INDEX = 4;
 
+    private long PUBLISH_THRESHOLD_TIME;
     private List<String> tags;
     private Map<String, Integer> tagOrderMap;
     private Map<String, Record> recordMap;
-    private SortedMap<String, Record> readyRecordMap;
 
-    public RecordAggregator(List<String> tags) {
+    // minPublishInterval is the minimum subscription notification publish interval from OPC UA server
+    public RecordAggregator(List<String> tags, long minPublishInterval) {
 
         this.tags = tags;
         this.tagOrderMap = new HashMap<>();
         this.recordMap = new HashMap<>();
-        this.readyRecordMap = new TreeMap<>((s1, s2) -> (int)(Long.parseLong(s1) - Long.parseLong(s2)));
+
+        PUBLISH_THRESHOLD_TIME = PUBLISH_INTERVAL_MULTIPLIER * minPublishInterval;
 
         // Create a map which with tag name as key and its order in list as value
         for (int i = 0; i < tags.size(); i++) {
@@ -70,43 +72,24 @@ public class RecordAggregator {
 
 
     public List<String> getReadyRecords() {
-        // Move old record to another list, ready for publish
-        long currentTime = System.currentTimeMillis();
-        Iterator<Map.Entry<String, Record>> iterator = recordMap.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<String, Record> entry = iterator.next();
-            if (currentTime - entry.getValue().getCreatedTime() > PUBLISH_THRESHOLD_TIME) {
-                readyRecordMap.put(entry.getKey(), entry.getValue());
-                iterator.remove();
-            }
-        }
 
         List<String> list = new ArrayList<>();
-        for (Map.Entry<String, Record> entry : readyRecordMap.entrySet()) {
-            list.add(entry.getKey() + "," +
-                    String.join(",", entry.getValue().getRecordArray()) +
-                    System.getProperty("line.separator"));
+        List<String> recordKeyList = new ArrayList<>(recordMap.keySet());
+        Collections.sort(recordKeyList);
+
+        for(String key : recordKeyList) {
+            Record rec = recordMap.get(key);
+            if(rec.isReady(PUBLISH_THRESHOLD_TIME)) {
+                list.add(key + "," +
+                        String.join(",", rec.getRecordArray()) +
+                        System.getProperty("line.separator"));
+                recordMap.remove(key);
+            }
         }
 
         return list;
     }
 
-    public void clearReadyRecord() {
-        readyRecordMap.clear();
-    }
-
-    // Method for debugging
-    public void printRecord() {
-        System.out.println("Record waiting:");
-        for (Map.Entry<String, Record> entry : recordMap.entrySet()) {
-            System.out.println(entry.getKey() + "-" + Arrays.toString(entry.getValue().getRecordArray()));
-        }
-
-        System.out.println("Record ready:");
-        for (Map.Entry<String, Record> entry : readyRecordMap.entrySet()) {
-            System.out.println(entry.getKey() + "-" + Arrays.toString(entry.getValue().getRecordArray()));
-        }
-    }
 
     class Record {
 
@@ -125,12 +108,14 @@ public class RecordAggregator {
             return recordValues;
         }
 
-        long getCreatedTime() {
-            return createdTime;
-        }
-
         String getTimeStamp() {
             return timeStamp;
+        }
+
+        boolean isReady(long timeThrashold) {
+            long currentTime = System.currentTimeMillis();
+
+            return (currentTime - createdTime) > timeThrashold;
         }
 
     }
