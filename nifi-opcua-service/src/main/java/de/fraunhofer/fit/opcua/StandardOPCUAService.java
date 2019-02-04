@@ -50,8 +50,12 @@ import org.eclipse.milo.opcua.stack.core.types.structured.*;
 import org.eclipse.milo.opcua.stack.core.util.CertificateUtil;
 
 import java.security.cert.X509Certificate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -172,7 +176,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
 
     private OpcUaClient opcClient;
-    private Map<String, UInteger> subscriptionMap;
+    private Map<String, SubscriptionConfig> subscriptionMap;
 
     private final AtomicLong clientHandles = new AtomicLong(1L);
 
@@ -200,7 +204,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     /**
      * @param context the configuration context
-     * @throws InitializationException if unable to create a database connection
+     * @throws InitializationException
      */
     @OnEnabled
     public void onEnabled(final ConfigurationContext context) throws InitializationException {
@@ -248,7 +252,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             // instead of using the discovered URL. Useful when client is visiting the server through
             // some proxy or SSH tunneling, and the discovered URL is not reachable.
             if (context.getProperty(USE_PROXY).asBoolean()) {
-                endpointDescription =  new EndpointDescription(endpoint,
+                endpointDescription = new EndpointDescription(endpoint,
                         endpointDescription.getServer(),
                         endpointDescription.getServerCertificate(),
                         endpointDescription.getSecurityMode(),
@@ -258,7 +262,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                         endpointDescription.getSecurityLevel());
             }
 
-                cfgBuilder.setEndpoint(endpointDescription);
+            cfgBuilder.setEndpoint(endpointDescription);
             if (!context.getProperty(SECURITY_POLICY).getValue().equals("None")) {  // If security policy is used
 
                 // clientKsLocation has already been validated, no need to check again
@@ -313,23 +317,16 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             opcClient = new OpcUaClient(cfgBuilder.build());
             opcClient.connect().get(5, TimeUnit.SECONDS);
 
-            opcClient.getSubscriptionManager().addSubscriptionListener(new UaSubscriptionManager.SubscriptionListener() {
-                @Override
-                public void onSubscriptionTransferFailed(UaSubscription subscription, StatusCode statusCode) {
-                    // TODO: this right now is just for logging purpose, need to further investigate the behavior for subscription transfer
-                    getLogger().warn("Subscription transfer failed!");
-                }
+            if (subscriptionMap == null) {
+                subscriptionMap = new ConcurrentHashMap<>();
+            }
 
-                @Override
-                public void onPublishFailure(UaException exception) {
-                    getLogger().warn("Subscription publish failure: " + exception.getMessage() + ", status code: " + exception.getStatusCode());
-                }
-            });
+            // Add custom SubscriptionListener to handle automatic recreating subscription
+            opcClient.getSubscriptionManager().addSubscriptionListener(new CustomSubscriptionListener());
 
         } catch (Exception e) {
             throw new InitializationException(e);
         }
-
 
     }
 
@@ -346,6 +343,16 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     }
 
 
+    /**
+     * Get the value according to a list of node names. This method uses the Read Attribute Service.
+     *
+     * @param tagNames A list of OPC UA node names
+     * @param returnTimestamp What timestamp to return. "Both", "Source" and "Server"
+     * @param excludeNullValue If null value in data is encountered, whether exclude them from adding to the final response
+     * @param nullValueString
+     * @return A UTF-8 byte array of response
+     * @throws ProcessException
+     */
     @Override
     public byte[] getValue(List<String> tagNames, String returnTimestamp, boolean excludeNullValue,
                            String nullValueString) throws ProcessException {
@@ -393,84 +400,34 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
 
     @Override
-    public String subscribe(List<String> tagNames, BlockingQueue<String> queue, boolean tsChangedNotify) throws ProcessException {
-
-        if (subscriptionMap == null) {
-            subscriptionMap = new HashMap<>();
-        }
+    public String subscribe(List<String> tagNames, BlockingQueue<String> queue,
+                            boolean tsChangedNotify, long minPublishInterval) throws ProcessException {
 
         try {
             if (opcClient == null) {
                 throw new Exception("OPC Client is null. OPC UA service was not enabled properly.");
             }
 
-            UaSubscription uaSubscription = opcClient.getSubscriptionManager().createSubscription(1000.0).get();
-
-            // Create a list of MonitoredItemCreateRequest
-            ArrayList<MonitoredItemCreateRequest> micrList = new ArrayList<>();
+            List<ReadValueId> readValueIds = new ArrayList<>();
             tagNames.forEach((tagName) -> {
-
                 ReadValueId readValueId = new ReadValueId(
                         NodeId.parse(tagName),
                         AttributeId.Value.uid(), null, QualifiedName.NULL_VALUE);
-
-                Long clientHandleLong = clientHandles.getAndIncrement();
-                UInteger clientHandle = uint(clientHandleLong);
-
-                // Important!
-                // If we apply this filter in MonitoringParameters, now not only we will get data when value changes,
-                // we will also get data even value doesn't change, but the timestamp has changed.
-                // If it is null, then the default DataChangeFilter will be used, which only get data when its value changes.
-                DataChangeFilter df = tsChangedNotify ?
-                        new DataChangeFilter(DataChangeTrigger.from(2), null, null) : null;
-
-                MonitoringParameters parameters = new MonitoringParameters(
-                        clientHandle,
-                        300.0,     // sampling interval
-                        ExtensionObject.encode(df),       // filter, null means use default
-                        uint(10),   // queue size
-                        true        // discard oldest
-                );
-
-                micrList.add(new MonitoredItemCreateRequest(
-                        readValueId, MonitoringMode.Reporting, parameters));
-
+                readValueIds.add(readValueId);
             });
 
-            // This is the callback when the MonitoredItem is created. In this callback, we set the consumer for incoming values
-            BiConsumer<UaMonitoredItem, Integer> onItemCreated =
-                    (item, id) -> item.setValueConsumer((it, value) -> {
-                        getLogger().debug("subscription value received: item=" + it.getReadValueId().getNodeId()
-                                + " value=" + value.getValue());
-                        String valueLine = writeCsv(getFullName(it.getReadValueId().getNodeId()),
-                                "Both", value, false, "");
+            // Important!
+            // If we apply this filter in MonitoringParameters, now not only we will get data when value changes,
+            // we will also get data even value doesn't change, but the timestamp has changed.
+            // If it is null, then the default DataChangeFilter will be used, which only get data when its value changes.
+            DataChangeFilter changeFilter = tsChangedNotify ?
+                    new DataChangeFilter(DataChangeTrigger.from(2), null, null) : null;
 
-                        queue.offer(valueLine);
-                    });
+            UaSubscription sub = createSubscription(minPublishInterval);
 
-            List<UaMonitoredItem> items = uaSubscription.createMonitoredItems(
-                    TimestampsToReturn.Both,
-                    micrList,
-                    onItemCreated
-            ).get();
+            createMonitorItems(sub, readValueIds, queue, changeFilter);
 
-            for (UaMonitoredItem item : items) {
-                if (item.getStatusCode().isGood()) {
-                    getLogger().debug("item created for nodeId=" + item.getReadValueId().getNodeId());
-                } else {
-                    getLogger().error("failed to create item for nodeId=" + item.getReadValueId().getNodeId()
-                            + " (status=" + item.getStatusCode() + ")");
-                }
-            }
-
-            String subscriptionUid;
-            do {
-                subscriptionUid = generateRandomChars(10);
-            } while (subscriptionMap.containsKey(subscriptionUid));
-
-            subscriptionMap.put(subscriptionUid, uaSubscription.getSubscriptionId());
-
-            return subscriptionUid;
+            return putSubToMap(sub, queue);
 
         } catch (Exception e) {
             throw new ProcessException(e.getMessage());
@@ -478,21 +435,20 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     }
 
     @Override
-    public void unsubscribe(String subscriptionUid) throws ProcessException {
+    public void unsubscribe(String subscriptionUid) {
 
         if (opcClient == null) {
             throw new ProcessException("OPC Client is null. OPC UA service was not enabled properly.");
         }
 
         if (subscriptionMap.get(subscriptionUid) != null) {
-
             try {
-
+                UInteger subId = UInteger.valueOf(subscriptionUid);
                 opcClient.getSubscriptionManager()
-                        .deleteSubscription(subscriptionMap.get(subscriptionUid)).get(4, TimeUnit.SECONDS);
+                        .deleteSubscription(subId).get(4, TimeUnit.SECONDS);
                 subscriptionMap.remove(subscriptionUid);
             } catch (Exception e) {
-                throw new ProcessException(e);
+                getLogger().warn("Unsubscribe failed: " + e.getMessage());
             }
         }
 
@@ -590,23 +546,78 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 identifierType, nodeId.getIdentifier().toString());
     }
 
-    private String generateRandomChars(int length) {
-        String candidateChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-        StringBuilder sb = new StringBuilder();
-        Random random = new Random();
-        for (int i = 0; i < length; i++) {
-            sb.append(candidateChars.charAt(random.nextInt(candidateChars
-                    .length())));
-        }
-        return sb.toString();
+
+    private UaSubscription createSubscription(long minPublishInterval) throws Exception {
+        return opcClient.getSubscriptionManager()
+                .createSubscription((double) minPublishInterval).get();
     }
+
+
+    private void createMonitorItems(UaSubscription uaSubscription, List<ReadValueId> readValueIds,
+                                    BlockingQueue<String> queue, DataChangeFilter df) throws Exception {
+
+        // Create a list of MonitoredItemCreateRequest
+        ArrayList<MonitoredItemCreateRequest> micrList = new ArrayList<>();
+        readValueIds.forEach((readValueId) -> {
+
+            Long clientHandleLong = clientHandles.getAndIncrement();
+            UInteger clientHandle = uint(clientHandleLong);
+
+            MonitoringParameters parameters = new MonitoringParameters(
+                    clientHandle,
+                    300.0,     // sampling interval
+                    ExtensionObject.encode(df),       // filter, null means use default
+                    uint(10),   // queue size
+                    true        // discard oldest
+            );
+
+            micrList.add(new MonitoredItemCreateRequest(
+                    readValueId, MonitoringMode.Reporting, parameters));
+
+        });
+
+        // This is the callback when the MonitoredItem is created. In this callback, we set the consumer for incoming values
+        BiConsumer<UaMonitoredItem, Integer> onItemCreated =
+                (item, id) -> item.setValueConsumer((it, value) -> {
+                    getLogger().debug("subscription value received: item=" + it.getReadValueId().getNodeId()
+                            + " value=" + value.getValue());
+                    String valueLine = writeCsv(getFullName(it.getReadValueId().getNodeId()),
+                            "Both", value, false, "");
+
+                    queue.offer(valueLine);
+                });
+
+        List<UaMonitoredItem> items = uaSubscription.createMonitoredItems(
+                TimestampsToReturn.Both,
+                micrList,
+                onItemCreated
+        ).get();
+
+        for (UaMonitoredItem item : items) {
+            if (item.getStatusCode().isGood()) {
+                getLogger().debug("item created for nodeId=" + item.getReadValueId().getNodeId());
+            } else {
+                getLogger().error("failed to create item for nodeId=" + item.getReadValueId().getNodeId()
+                        + " (status=" + item.getStatusCode() + ")");
+            }
+        }
+
+    }
+
+    // Put SubscriptionConfig to a map for later retrieval
+    private String putSubToMap(UaSubscription sub, BlockingQueue<String> queue) {
+        String subUid = sub.getSubscriptionId().toString();
+        subscriptionMap.put(subUid, new SubscriptionConfig(sub, queue));
+        return subUid;
+    }
+
 
     private String writeCsv(String tagName, String returnTimestamp, DataValue value,
                             boolean excludeNullValue, String nullValueString) {
 
         String sValue = nullValueString;
 
-        if(value == null || value.getValue() == null || value.getValue().getValue() == null) {
+        if (value == null || value.getValue() == null || value.getValue().getValue() == null) {
 
             if (excludeNullValue) {
                 getLogger().debug("Null value returned for " + tagName
@@ -617,7 +628,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         } else {
 
             // Check the type of variant
-            if(value.getValue().getValue().getClass().isArray()) {
+            if (value.getValue().getValue().getClass().isArray()) {
 
                 StringBuilder sb = new StringBuilder();
                 Object[] arr = (Object[]) value.getValue().getValue();
@@ -637,11 +648,11 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         valueLine.append(tagName).append(",");
 
         if (("ServerTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            if(value.getServerTime() != null) valueLine.append(value.getServerTime().getJavaTime());
+            if (value.getServerTime() != null) valueLine.append(value.getServerTime().getJavaTime());
             valueLine.append(",");
         }
         if (("SourceTimestamp").equals(returnTimestamp) || ("Both").equals(returnTimestamp)) {
-            if(value.getSourceTime() != null) valueLine.append(value.getSourceTime().getJavaTime());
+            if (value.getSourceTime() != null) valueLine.append(value.getSourceTime().getJavaTime());
             valueLine.append(",");
         }
 
@@ -653,4 +664,63 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
         return valueLine.toString();
     }
+
+    // Special class as container to wrap subscription with the queue connected to a SubscribeOPCUANodes processor
+    private static class SubscriptionConfig {
+
+        private UaSubscription subscription;
+        private BlockingQueue<String> queue;
+
+        public SubscriptionConfig(UaSubscription subscription, BlockingQueue<String> queue) {
+            this.subscription = subscription;
+            this.queue = queue;
+        }
+
+        public UaSubscription getSubscription() {
+            return subscription;
+        }
+
+        public BlockingQueue<String> getQueue() {
+            return queue;
+        }
+    }
+
+    // Custom SubscriptionListener to handle recreating subscription when transfer fails
+    private class CustomSubscriptionListener implements UaSubscriptionManager.SubscriptionListener {
+
+        @Override
+        public void onPublishFailure(UaException exception) {
+            getLogger().warn("Subscription publish failure: " + exception.getMessage() + ", status code: " + exception.getStatusCode());
+        }
+
+        @Override
+        public void onSubscriptionTransferFailed(UaSubscription subscription, StatusCode statusCode) {
+            getLogger().warn("Subscription transfer failed: "+ statusCode + ". Trying to recreate subscription...");
+
+            // Get config from subscription object
+            long minPublishInterval = (long) subscription.getRequestedPublishingInterval();
+            BlockingQueue<String> queue = subscriptionMap.get(subscription.getSubscriptionId().toString())
+                    .getQueue();
+            List<ReadValueId> readValueIds = new ArrayList<>();
+            DataChangeFilter df = null;
+            for(UaMonitoredItem mi : subscription.getMonitoredItems()) {
+                if(df == null) df = mi.getMonitoringFilter().decode();
+                readValueIds.add(mi.getReadValueId());
+            }
+
+            // Try to clean up the previous subscription first
+            unsubscribe(subscription.getSubscriptionId().toString());
+
+            // Recreate subscription with the previous MonitoredItems
+            try {
+                UaSubscription newSub = createSubscription(minPublishInterval);
+                createMonitorItems(newSub, readValueIds, queue, df);
+                putSubToMap(newSub, queue);
+            } catch (Exception e) {
+                e.printStackTrace();
+                getLogger().error("Recreating subscription failed!");
+            }
+        }
+    }
+
 }

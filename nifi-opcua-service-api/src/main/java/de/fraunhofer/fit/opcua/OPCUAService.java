@@ -35,7 +35,8 @@ public interface OPCUAService extends ControllerService {
                     boolean printNonLeafNode, String rootNodeId)
             throws ProcessException;
 
-    String subscribe(List<String> reqTagNames, BlockingQueue<String> queue, boolean tsChangedNotify) throws ProcessException;
+    String subscribe(List<String> reqTagNames, BlockingQueue<String> queue,
+                     boolean tsChangedNotify, long minPublishInterval) throws ProcessException;
 
-    void unsubscribe(String subscriberUid) throws ProcessException;
+    void unsubscribe(String subscriberUid);
 }

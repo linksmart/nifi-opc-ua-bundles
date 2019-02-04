@@ -160,7 +160,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
         tsChangedNotify = Boolean.valueOf(context.getProperty(TS_CHANGE_NOTIFY).getValue());
         minPublishInterval = context.getProperty(MIN_PUBLISH_INTERVAL).asLong();
 
-        subscriberUid = opcUaService.subscribe(tagNames, msgQueue, tsChangedNotify);
+        subscriberUid = opcUaService.subscribe(tagNames, msgQueue, tsChangedNotify, minPublishInterval);
 
         recordAggregator = new RecordAggregator(tagNames, minPublishInterval);
     }
@@ -221,7 +221,7 @@ public class SubscribeOPCNodes extends AbstractProcessor {
     }
 
     @OnStopped
-    public void onStopped(final ProcessContext context) throws Exception {
+    public void onStopped(final ProcessContext context) {
 
         getLogger().debug("Unsubscribing from OPC Server...");
         opcUaService.unsubscribe(subscriberUid);
