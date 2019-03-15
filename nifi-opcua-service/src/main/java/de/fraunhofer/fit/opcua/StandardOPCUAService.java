@@ -69,7 +69,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     public static final PropertyDescriptor ENDPOINT = new PropertyDescriptor
             .Builder().name("Endpoint URL")
-            .description("the opc.tcp address of the opc ua server")
+            .description("The opc.tcp address of the opc ua server, e.g. opc.tcp://192.168.0.2:48010")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
@@ -163,7 +163,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
     public static final PropertyDescriptor USE_PROXY = new PropertyDescriptor
             .Builder().name("Use Proxy")
             .description("If true, the \"Endpoint URL\" specified above will be used to establish connection to the server instead of the discovered URL. " +
-                    "Useful when connecting to OPC UA server through IP layer proxy or through SSH tunnel, in which the discovered URL is not reachable by the client.")
+                    "Useful when connecting to OPC UA server behind NAT or through SSH tunnel, in which the discovered URL is not reachable by the client.")
             .required(true)
             .defaultValue("false")
             .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
