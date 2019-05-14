@@ -34,26 +34,28 @@ Auth Policy | Choose between "Anonymous" or using username-password for authenti
 Username | Only valid when `Auth Policy` is set to `Username`. The username for authentication.
 Password | Only valid when `Auth Policy` is set to `Username`. The password for authentication.
 
-#### Instructions on testing security connection
+#### How to test security connection
 - Generate a client keystore containing a self-signed certificate (notice that you should use the same password for both storepass and keypass):
 
 ```bash
 keytool -genkey -keyalg RSA -alias nifi-client -keystore client.jks -storepass SuperSecret -keypass SuperSecret -validity 360 -keysize 2048
 ```
 
-- Download the server certificate from the OPC UA server (let's name it server.der);  
+- Download the server certificate from the OPC UA server (let's name it `server.der`);  
 
 - Import the certificate into a JKS trust store:
 ```bash
 keytool -importcert -file server.der -alias opc-ua-server -keystore trust.jks -storepass SuperSecret
 ```
 
-- Reference these two keystores from the OPCUAService property fields.
+- Reference these two stores from the `StandardOPCUAService` property fields.
 
 #### Side Notes
-- The security features have been tested against the in-house IBH Link UA server (However, currently I haven't found the way to limit anonymous user accessing data on this server, so the username-based access cannot be fully tested).  
-  
-- Notice: when the client tries to connect to the OPC server for the first time and the client certificate is not yet trusted by the server yet, 
+- The security features have been tested against the in-house `IBH Link UA` server 
+
+- When the client tries to connect to the OPC server for the first time and the client certificate is not yet trusted by the server yet, 
 the connection would not succeed. At this time, you should go to the web interface of the OPC server and manually trust the certificate. Restart the service and the connection should then succeed.  
+
+- When testing security connection, there is possibility that you run into the exception `Illegal Key Size` exception. For solution, please refer to the post [here](https://deveshsharmablogs.wordpress.com/2012/10/09/fixing-java-security-invalidkeyexception-illegal-key-size-exception/).
   
   

@@ -41,9 +41,11 @@ import org.eclipse.milo.opcua.stack.client.UaTcpStackClient;
 import org.eclipse.milo.opcua.stack.core.AttributeId;
 import org.eclipse.milo.opcua.stack.core.Identifiers;
 import org.eclipse.milo.opcua.stack.core.UaException;
+import org.eclipse.milo.opcua.stack.core.security.SecurityPolicy;
 import org.eclipse.milo.opcua.stack.core.types.builtin.*;
 import org.eclipse.milo.opcua.stack.core.types.builtin.unsigned.UInteger;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.DataChangeTrigger;
+import org.eclipse.milo.opcua.stack.core.types.enumerated.MessageSecurityMode;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.MonitoringMode;
 import org.eclipse.milo.opcua.stack.core.types.enumerated.TimestampsToReturn;
 import org.eclipse.milo.opcua.stack.core.types.structured.*;
@@ -79,7 +81,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .Builder().name("Security Policy")
             .description("What security policy to use for connection with OPC UA server")
             .required(true)
-            .allowableValues("None", "Basic128Rsa15", "Basic256", "Basic256Rsa256")
+            .allowableValues("None", "Basic128Rsa15", "Basic256", "Basic256Sha256", "Aes256_Sha256_RsaPss", "Aes128_Sha256_RsaOaep")
             .defaultValue("None")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
@@ -172,9 +174,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     private static final List<PropertyDescriptor> properties;
 
-    private final String SECURITY_POLICY_PREFIX = "http://opcfoundation.org/UA/SecurityPolicy#";
-
-
     private OpcUaClient opcClient;
     private Map<String, SubscriptionConfig> subscriptionMap;
 
@@ -213,44 +212,68 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         if (endpoint == null) {
             throw new InitializationException("Endpoint can't be null.");
         }
-        String securityPolicy = SECURITY_POLICY_PREFIX + context.getProperty(SECURITY_POLICY).getValue();
 
-        // Get the Security Mode value: 1 - None; 2 - Sign; 3 - Sign and Encrypt
-        int securityModeValue;
+        // Get the Security Mode
+        MessageSecurityMode minSecurityMode;
         if (context.getProperty(SECURITY_POLICY).getValue().equals("None")) {
-            securityModeValue = 1;
+            minSecurityMode = MessageSecurityMode.None;
         } else if (context.getProperty(SECURITY_MODE).getValue().equals("Sign")) {
-            securityModeValue = 2;
-        } else {
-            securityModeValue = 3;
+            minSecurityMode = MessageSecurityMode.Sign;
+        } else  {
+            minSecurityMode = MessageSecurityMode.SignAndEncrypt;
         }
 
+        // Get the security policy
+        SecurityPolicy minSecurityPolicy = null;
+        switch(context.getProperty(SECURITY_POLICY).getValue()) {
+            case "None":
+                minSecurityPolicy = SecurityPolicy.None;
+                minSecurityMode = MessageSecurityMode.None;
+                break;
+            case "Basic128Rsa15":
+                minSecurityPolicy = SecurityPolicy.Basic128Rsa15;
+                break;
+            case "Basic256":
+                minSecurityPolicy = SecurityPolicy.Basic256;
+                break;
+            case "Basic256Sha256":
+                minSecurityPolicy = SecurityPolicy.Basic256Sha256;
+                break;
+            case "Aes256_Sha256_RsaPss":
+                minSecurityPolicy = SecurityPolicy.Aes256_Sha256_RsaPss;
+                break;
+            case "Aes128_Sha256_RsaOaep":
+                minSecurityPolicy = SecurityPolicy.Aes128_Sha256_RsaOaep;
+                break;
+        }
+
+        if(minSecurityPolicy == null) {
+            throw new InitializationException("OPC UA connection security configuration not correct. Security mode: " +
+                    minSecurityMode.name() + ", security policy: " + minSecurityPolicy.name());
+        }
 
         try {
             EndpointDescription[] endpoints =
                     UaTcpStackClient.getEndpoints(endpoint).get();
 
-            EndpointDescription endpointDescription = null;
-            for (EndpointDescription ed : endpoints) {
-
-                if (ed.getSecurityPolicyUri().equals(securityPolicy)
-                        && ed.getSecurityMode().getValue() == securityModeValue) {
-                    endpointDescription = ed;
-                    getLogger().debug("*** Connecting to endpoint " + ed.getEndpointUrl()
-                            + " with security policy " + ed.getSecurityPolicyUri()
-                            + " and security mode " + ed.getSecurityMode().name());
-                }
-            }
+            EndpointDescription endpointDescription = chooseEndpoint(endpoints, minSecurityPolicy, minSecurityMode);
 
             if (endpointDescription == null) {
-                throw new InitializationException("No endpoint with the specified security policy was found.");
+                StringBuilder sb = new StringBuilder();
+                sb.append("No exact security configuration match is found. \n" +
+                        "You specified security mode: " + minSecurityMode.name() + ", security policy: " + minSecurityPolicy.getSecurityPolicyUri() + "\n" +
+                        "Available combinations: \n");
+                for(EndpointDescription ed : endpoints) {
+                    sb.append("security mode: " + ed.getSecurityMode().name() + ", security policy: " + ed.getSecurityPolicyUri() + "\n");
+                }
+                throw new InitializationException(sb.toString());
             }
 
             OpcUaClientConfigBuilder cfgBuilder = new OpcUaClientConfigBuilder();
 
             // The following code is used to force the client to connect to the URL given by user,
             // instead of using the discovered URL. Useful when client is visiting the server through
-            // some proxy or SSH tunneling, and the discovered URL is not reachable.
+            // some NAT or SSH tunneling, and the discovered URL is not reachable.
             if (context.getProperty(USE_PROXY).asBoolean()) {
                 endpointDescription = new EndpointDescription(endpoint,
                         endpointDescription.getServer(),
@@ -468,6 +491,28 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             throw new ProcessException(e.getMessage());
         }
 
+    }
+
+    // Choose the proper endpoint from discovered endpoints according to security settings
+    private EndpointDescription chooseEndpoint(
+            EndpointDescription[] endpoints,
+            SecurityPolicy minSecurityPolicy,
+            MessageSecurityMode minMessageSecurityMode) {
+
+        for (EndpointDescription endpoint : endpoints) {
+            SecurityPolicy endpointSecurityPolicy;
+            try {
+                endpointSecurityPolicy = SecurityPolicy.fromUri(endpoint.getSecurityPolicyUri());
+            } catch (UaException e) {
+                continue;
+            }
+            if (minSecurityPolicy.compareTo(endpointSecurityPolicy) == 0 &&
+                    minMessageSecurityMode.compareTo(endpoint.getSecurityMode()) == 0) {
+                    // Found endpoint which fulfills minimum requirements
+                return endpoint;
+            }
+        }
+        return null;
     }
 
     // remainDepth = 0 means only print out the current node
