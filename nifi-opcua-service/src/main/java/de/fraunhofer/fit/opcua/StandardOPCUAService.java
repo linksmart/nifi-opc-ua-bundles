@@ -95,6 +95,14 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
+
+    public static final PropertyDescriptor APPLICATION_URI = new PropertyDescriptor
+            .Builder().name("Application URI")
+            .description("The application URI of your OPC-UA server. It should match the \"URI\" field \"Subject Alternative Name\" of your server certification. Typically it has the form of \"urn:aaa:bbb\". Depends on the implementation of the server, this may not be required.")
+            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
+            .addValidator(Validator.VALID)
+            .build();
+
     public static final PropertyDescriptor CLIENT_KS_LOCATION = new PropertyDescriptor
             .Builder().name("Client Keystore Location")
             .description("The location of the client keystore. Only valid when \"Security Policy\" isn't \"None\". " +
@@ -184,6 +192,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
         props.add(ENDPOINT);
         props.add(SECURITY_POLICY);
         props.add(SECURITY_MODE);
+        props.add(APPLICATION_URI);
         props.add(CLIENT_KS_LOCATION);
         props.add(CLIENT_KS_PASSWORD);
         props.add(REQUIRE_SERVER_AUTH);
@@ -336,6 +345,9 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             cfgBuilder.setIdentityProvider(identityProvider);
 
+            if(context.getProperty(APPLICATION_URI).evaluateAttributeExpressions().getValue() != null) {
+                cfgBuilder.setApplicationUri(context.getProperty(APPLICATION_URI).evaluateAttributeExpressions().getValue());
+            }
 
             opcClient = new OpcUaClient(cfgBuilder.build());
             opcClient.connect().get(5, TimeUnit.SECONDS);

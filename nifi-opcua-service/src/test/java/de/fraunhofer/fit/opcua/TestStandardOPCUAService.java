@@ -136,8 +136,9 @@ public class TestStandardOPCUAService {
     @Test
     public void testUsernameSecurityAccess() {
         runner.setProperty(service, StandardOPCUAService.ENDPOINT, endpoint);
-        runner.setProperty(service, StandardOPCUAService.SECURITY_POLICY, "Basic128Rsa15");
+        runner.setProperty(service, StandardOPCUAService.SECURITY_POLICY, "Basic256Sha256");
         runner.setProperty(service, StandardOPCUAService.SECURITY_MODE, "SignAndEncrypt");
+        runner.setProperty(service, StandardOPCUAService.APPLICATION_URI, "urn:ibhlinkua_001151:IBHsoftec:IBHLinkUA");
         runner.setProperty(service, StandardOPCUAService.CLIENT_KS_LOCATION, "src/test/resources/client.jks");
         runner.setProperty(service, StandardOPCUAService.CLIENT_KS_PASSWORD, "password");
         runner.setProperty(service, StandardOPCUAService.REQUIRE_SERVER_AUTH, "true");
@@ -145,7 +146,7 @@ public class TestStandardOPCUAService {
         runner.setProperty(service, StandardOPCUAService.TRUSTSTORE_PASSWORD, "SuperSecret");
         runner.setProperty(service, StandardOPCUAService.AUTH_POLICY, "Username");
         runner.setProperty(service, StandardOPCUAService.USERNAME, "test1");
-        //runner.setProperty(service, StandardOPCUAService.PASSWORD, "password");
+        runner.setProperty(service, StandardOPCUAService.PASSWORD, "password");
 
         runner.assertValid(service);
 
