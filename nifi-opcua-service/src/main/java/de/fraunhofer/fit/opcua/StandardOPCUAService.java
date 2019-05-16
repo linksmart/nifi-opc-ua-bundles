@@ -118,6 +118,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .description("The password for the client keystore")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
+            .sensitive(true)
             .build();
 
     public static final PropertyDescriptor REQUIRE_SERVER_AUTH = new PropertyDescriptor
@@ -142,6 +143,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             .description("The password for the trust store")
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
+            .sensitive(true)
             .build();
 
     public static final PropertyDescriptor AUTH_POLICY = new PropertyDescriptor
