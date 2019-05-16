@@ -98,7 +98,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     public static final PropertyDescriptor APPLICATION_URI = new PropertyDescriptor
             .Builder().name("Application URI")
-            .description("The application URI of your OPC-UA server. It should match the \"URI\" field \"Subject Alternative Name\" of your server certification. Typically it has the form of \"urn:aaa:bbb\". Depends on the implementation of the server, this may not be required.")
+            .description("The application URI of your OPC-UA client. It must match the \"URI\" field in \"Subject Alternative Name\" of your client certificate. Typically it has the form of \"urn:aaa:bbb\". However, whether this field is checked depends on the implementation of the server. That means, for some servers, it is not necessary to specify this field.")
             .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
             .addValidator(Validator.VALID)
             .build();
