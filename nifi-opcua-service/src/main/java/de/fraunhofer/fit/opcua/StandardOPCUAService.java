@@ -345,8 +345,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             cfgBuilder.setIdentityProvider(identityProvider);
 
-            if(context.getProperty(APPLICATION_URI).evaluateAttributeExpressions().getValue() != null) {
-                cfgBuilder.setApplicationUri(context.getProperty(APPLICATION_URI).evaluateAttributeExpressions().getValue());
+            String applicationUri = context.getProperty(APPLICATION_URI).evaluateAttributeExpressions().getValue();
+            if(applicationUri != null) {
+                cfgBuilder.setApplicationUri(applicationUri);
+                cfgBuilder.setProductUri(applicationUri);
             }
 
             opcClient = new OpcUaClient(cfgBuilder.build());
