@@ -214,7 +214,7 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
     /**
      * @param context the configuration context
-     * @throws InitializationException
+     * @throws InitializationException exceptions that happens during the connection establishing phase
      */
     @OnEnabled
     public void onEnabled(final ConfigurationContext context) throws InitializationException {
@@ -230,17 +230,13 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             minSecurityMode = MessageSecurityMode.None;
         } else if (context.getProperty(SECURITY_MODE).getValue().equals("Sign")) {
             minSecurityMode = MessageSecurityMode.Sign;
-        } else  {
+        } else {
             minSecurityMode = MessageSecurityMode.SignAndEncrypt;
         }
 
         // Get the security policy
-        SecurityPolicy minSecurityPolicy = null;
+        SecurityPolicy minSecurityPolicy;
         switch(context.getProperty(SECURITY_POLICY).getValue()) {
-            case "None":
-                minSecurityPolicy = SecurityPolicy.None;
-                minSecurityMode = MessageSecurityMode.None;
-                break;
             case "Basic128Rsa15":
                 minSecurityPolicy = SecurityPolicy.Basic128Rsa15;
                 break;
@@ -256,11 +252,10 @@ public class StandardOPCUAService extends AbstractControllerService implements O
             case "Aes128_Sha256_RsaOaep":
                 minSecurityPolicy = SecurityPolicy.Aes128_Sha256_RsaOaep;
                 break;
-        }
-
-        if(minSecurityPolicy == null) {
-            throw new InitializationException("OPC UA connection security configuration not correct. Security mode: " +
-                    minSecurityMode.name() + ", security policy: " + minSecurityPolicy.name());
+            default:
+                minSecurityPolicy = SecurityPolicy.None;
+                minSecurityMode = MessageSecurityMode.None;
+                break;
         }
 
         try {
@@ -271,11 +266,16 @@ public class StandardOPCUAService extends AbstractControllerService implements O
 
             if (endpointDescription == null) {
                 StringBuilder sb = new StringBuilder();
-                sb.append("No exact security configuration match is found. \n" +
-                        "You specified security mode: " + minSecurityMode.name() + ", security policy: " + minSecurityPolicy.getSecurityPolicyUri() + "\n" +
-                        "Available combinations: \n");
+                sb.append(String.format("No exact security configuration match is found. \n" +
+                        "You specified security mode: %s, security policy: %s\n" +
+                        "Available combinations: \n",
+                        minSecurityMode.name(),
+                        minSecurityPolicy.getSecurityPolicyUri()));
+
                 for(EndpointDescription ed : endpoints) {
-                    sb.append("security mode: " + ed.getSecurityMode().name() + ", security policy: " + ed.getSecurityPolicyUri() + "\n");
+                    sb.append(String.format("security mode: %s, security policy: %s\n",
+                            ed.getSecurityMode().name(),
+                            ed.getSecurityPolicyUri()));
                 }
                 throw new InitializationException(sb.toString());
             }
@@ -339,7 +339,6 @@ public class StandardOPCUAService extends AbstractControllerService implements O
                 identityProvider = new AnonymousProvider();
             } else {
                 String username = context.getProperty(USERNAME).evaluateAttributeExpressions().getValue();
-                username = username == null ? "" : username;
                 String password = context.getProperty(PASSWORD).evaluateAttributeExpressions().getValue();
                 identityProvider = new UsernameProvider(username == null ? "" : username,
                         password == null ? "" : password);
@@ -388,9 +387,9 @@ public class StandardOPCUAService extends AbstractControllerService implements O
      * @param tagNames A list of OPC UA node names
      * @param returnTimestamp What timestamp to return. "Both", "Source" and "Server"
      * @param excludeNullValue If null value in data is encountered, whether exclude them from adding to the final response
-     * @param nullValueString
+     * @param nullValueString String to replace the null value, if excludeNullValue is false
      * @return A UTF-8 byte array of response
-     * @throws ProcessException
+     * @throws ProcessException Exceptions happens when getting values from OPC-UA server
      */
     @Override
     public byte[] getValue(List<String> tagNames, String returnTimestamp, boolean excludeNullValue,
