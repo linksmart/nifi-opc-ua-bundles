@@ -29,8 +29,8 @@ Application URI | The application URI of your OPC-UA CLIENT. It must match the \
 Client Keystore Location | The location of the keystore file (`JKS` type). Notice that the keystore should have one `PrivateKeyEntry` (private key + certificate). If multiple exist, then the first one will be used. Also notice that the the key password should be the same as the keystore password.
 Client Keystore Password | The password of the keystore (the key password should also be the same)
 Require Server Authentication | Whether to verify server certificate against the trust store. It is recommended to disable this option for easier testing, but enable it for production usage.
-Trust Store Location | The location of the keystore file (`JKS` type). Multiple certificates inside the trust store is possible.
-Trust Store Password | The password of the keystore.
+Trust Store Location | The location of the truststore file (`JKS` type). Multiple certificates inside the trust store is possible.
+Trust Store Password | The password of the truststore.
 Auth Policy | Choose between "Anonymous" or using username-password for authentication.
 Username | Only valid when `Auth Policy` is set to `Username`. The username for authentication.
 Password | Only valid when `Auth Policy` is set to `Username`. The password for authentication.
@@ -60,5 +60,3 @@ the connection will fail with the error `Bad_SecurityChecksFailed`. This is beca
 - When you get the error `Bad_CertificateUriInvalid`, it is because the OPC-UA server checks the client's `Application URI` in its `Application Description` and it doesn't match the URI in the client certificate. Make sure you fill in the property field `Application URI` correctly.
 
 - When testing secure connection, there is possibility that you run into the exception `Illegal Key Size`. For solution, please refer to the post [here](https://deveshsharmablogs.wordpress.com/2012/10/09/fixing-java-security-invalidkeyexception-illegal-key-size-exception/).
-  
-  

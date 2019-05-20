@@ -44,14 +44,15 @@ class TrustStoreLoader {
         }
 
         // Check the first certificate to see if it is trusted
-        X509Certificate cert = serverCerts.get(0);
-        boolean certTrusted = trustedCerts.stream()
-                .anyMatch(c -> Arrays.equals(cert.getSignature(), c.getSignature()));
+        for(int i=0; i<serverCerts.size(); i++ ) {
 
-        if (certTrusted) return;
+            // Verify the current server certificate with all trusted one
+            X509Certificate cert = serverCerts.get(i);
+            boolean certTrusted = trustedCerts.stream()
+                    .anyMatch(c -> Arrays.equals(cert.getSignature(), c.getSignature()));
+            if (certTrusted) return;
 
-        // Verify certificate chain
-        for (int i = 0; i < serverCerts.size(); i++) {
+            // If no match, then we check whether the current server cert is signed by the next server cert up the chain
             if (i < serverCerts.size() - 1) {
                 try {
                     serverCerts.get(i).verify(serverCerts.get(i + 1).getPublicKey());
@@ -59,13 +60,10 @@ class TrustStoreLoader {
                     throw new Exception("Server certificate chain not valid.");
                 }
             }
+
         }
 
-        // Check the last certificate to see if it is trusted
-        X509Certificate caCert = serverCerts.get(serverCerts.size() - 1);
-        certTrusted = trustedCerts.stream()
-                .anyMatch(c -> Arrays.equals(caCert.getSignature(), c.getSignature()));
-
-        if (!certTrusted) throw new Exception("The CA of server certificate chain is not trusted.");
+        // If the program reaches this point, it means it has checked all server certs along the chain but none matches
+        throw new Exception("No trusted certificate found in the server certificate chain");
     }
 }
