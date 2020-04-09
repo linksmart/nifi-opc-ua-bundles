@@ -40,3 +40,9 @@ For the detailed description of each processor, you can find it here:
 - [GetOPCData](docs/get-opc-data.md)
 - [ListOPCNodes](docs/list-opc-nodes.md)
 - [SubscribeOPCNodes](docs/subscribe-opc-nodes.md)
+
+## Contributing
+
+This project is not actively maintained because of time crunch. But contributions are welcome in terms of documentation, implementations, examples and discussions. 
+
+Please fork, make your changes, and submit a pull request. For major changes, please open an issue first and discuss it with the other authors.
