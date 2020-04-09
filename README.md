@@ -1,4 +1,5 @@
 # Nifi OPC-UA Bundle
+**Note: This project is currently not actively maintained by LinkSmart. Please refer to [Contributing](#contributing) section to know more.**
 
 This is a bundle of OPC UA controller service and processors for Nifi. The bundle is an improvement built on top of the OPC UA bundle made by [HashmapInc](https://github.com/hashmapinc/nifi-opcua-bundle).  
 A couple of differences between the new bundle and the `HashmapInc` one:
@@ -42,7 +43,6 @@ For the detailed description of each processor, you can find it here:
 - [SubscribeOPCNodes](docs/subscribe-opc-nodes.md)
 
 ## Contributing
-
-This project is not actively maintained because of time crunch. But contributions are welcome in terms of documentation, implementations, examples and discussions. 
+Contributions are welcome in terms of documentation, implementations, and technical support. 
 
 Please fork, make your changes, and submit a pull request. For major changes, please open an issue first and discuss it with the other authors.
